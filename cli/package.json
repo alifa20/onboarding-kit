@@ -1,6 +1,6 @@
 {
   "name": "onboardkit",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Zero-cost AI-powered onboarding screen generator for React Native/Expo",
   "type": "module",
   "bin": {
@@ -8,7 +8,9 @@
   },
   "files": [
     "dist",
-    "templates"
+    "templates",
+    "examples",
+    "docs"
   ],
   "engines": {
     "node": ">=22"
@@ -34,10 +36,22 @@
     "cli",
     "code-generator",
     "ai",
-    "oauth"
+    "oauth",
+    "react-navigation",
+    "typescript",
+    "mobile",
+    "app-development"
   ],
   "author": "Ali",
   "license": "MIT",
+  "homepage": "https://github.com/alifa20/onboarding-kit#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alifa20/onboarding-kit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/alifa20/onboarding-kit/issues"
+  },
   "dependencies": {
     "commander": "^12.1.0",
     "@clack/prompts": "^1.0.0",
