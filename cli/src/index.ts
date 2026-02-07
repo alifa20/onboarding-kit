@@ -1,6 +1,8 @@
 import { Command } from 'commander';
 import { getVersion } from './lib/version.js';
 import { authCommand, authStatusCommand, authRevokeCommand } from './commands/auth.js';
+import { initCommand } from './commands/init.js';
+import { validateCommand } from './commands/validate.js';
 
 const program = new Command();
 
@@ -9,12 +11,12 @@ program
   .description('Zero-cost AI-powered onboarding screen generator for React Native/Expo')
   .version(getVersion(), '-v, --version', 'Display version number');
 
-// Placeholder commands - will be implemented in subsequent tasks
+// Init command
 program
   .command('init')
   .description('Create a new onboarding spec template')
-  .action(() => {
-    console.log('init command - coming soon');
+  .action(async () => {
+    await initCommand();
   });
 
 // Auth command with subcommands
@@ -49,11 +51,14 @@ authCmd.action(async () => {
   await authCommand({});
 });
 
+// Validate command
 program
   .command('validate')
   .description('Validate your onboarding spec')
-  .action(() => {
-    console.log('validate command - coming soon');
+  .option('-s, --spec <path>', 'Path to spec file (default: spec.md)')
+  .option('-v, --verbose', 'Show detailed output')
+  .action(async (options) => {
+    await validateCommand(options);
   });
 
 program

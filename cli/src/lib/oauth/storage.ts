@@ -6,12 +6,19 @@ import { StoredCredential, OAuthError } from './types.js';
 
 // Try to import keytar, but don't fail if it's not available
 let keytar: any = null;
-try {
-  // Dynamic import to handle optional dependency
-  const module = await import('keytar');
-  keytar = module.default || module;
-} catch (err) {
-  // Keytar not available, will use file fallback
+let keytarInitialized = false;
+
+async function initKeytar() {
+  if (keytarInitialized) return;
+  keytarInitialized = true;
+
+  try {
+    // Dynamic import to handle optional dependency
+    const module = await import('keytar');
+    keytar = module.default || module;
+  } catch (err) {
+    // Keytar not available, will use file fallback
+  }
 }
 
 const SERVICE_NAME = 'onboardkit';
@@ -84,6 +91,8 @@ async function ensureConfigDir(): Promise<void> {
  * Save credential to OS keychain (primary method)
  */
 async function saveToKeychain(key: string, value: string): Promise<boolean> {
+  await initKeytar();
+
   if (!keytar) {
     return false;
   }
@@ -101,6 +110,8 @@ async function saveToKeychain(key: string, value: string): Promise<boolean> {
  * Get credential from OS keychain
  */
 async function getFromKeychain(key: string): Promise<string | null> {
+  await initKeytar();
+
   if (!keytar) {
     return null;
   }
@@ -116,6 +127,8 @@ async function getFromKeychain(key: string): Promise<string | null> {
  * Delete credential from OS keychain
  */
 async function deleteFromKeychain(key: string): Promise<boolean> {
+  await initKeytar();
+
   if (!keytar) {
     return false;
   }
@@ -270,7 +283,8 @@ export async function hasCredentials(providerName: string): Promise<boolean> {
 /**
  * Check if keychain is available
  */
-export function isKeychainAvailable(): boolean {
+export async function isKeychainAvailable(): Promise<boolean> {
+  await initKeytar();
   return keytar !== null;
 }
 
