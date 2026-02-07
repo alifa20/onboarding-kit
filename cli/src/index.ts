@@ -3,6 +3,7 @@ import { getVersion } from './lib/version.js';
 import { authCommand, authStatusCommand, authRevokeCommand } from './commands/auth.js';
 import { initCommand } from './commands/init.js';
 import { validateCommand } from './commands/validate.js';
+import { generateCommand } from './commands/generate.js';
 
 const program = new Command();
 
@@ -64,8 +65,13 @@ program
 program
   .command('generate')
   .description('Generate screens from spec (template-only, no AI)')
-  .action(() => {
-    console.log('generate command - coming soon');
+  .option('-s, --spec <path>', 'Path to spec file (default: spec.md)')
+  .option('-o, --output <path>', 'Output directory (default: onboardkit-output)')
+  .option('-v, --verbose', 'Show detailed output')
+  .option('--dry-run', 'Preview what would be generated without writing files')
+  .option('--overwrite', 'Overwrite existing output directory')
+  .action(async (options) => {
+    await generateCommand(options);
   });
 
 program
