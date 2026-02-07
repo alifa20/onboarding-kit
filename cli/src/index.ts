@@ -4,6 +4,12 @@ import { authCommand, authStatusCommand, authRevokeCommand } from './commands/au
 import { initCommand } from './commands/init.js';
 import { validateCommand } from './commands/validate.js';
 import { generateCommand } from './commands/generate.js';
+import { onboardCommand } from './commands/onboard.js';
+import { resetCommand } from './commands/reset.js';
+import { initializeErrorHandling, withErrorHandling } from './lib/errors/index.js';
+
+// Initialize global error handlers
+initializeErrorHandling();
 
 const program = new Command();
 
@@ -16,9 +22,7 @@ program
 program
   .command('init')
   .description('Create a new onboarding spec template')
-  .action(async () => {
-    await initCommand();
-  });
+  .action(withErrorHandling(initCommand, { commandName: 'init' }));
 
 // Auth command with subcommands
 const authCmd = program
@@ -29,28 +33,20 @@ authCmd
   .command('login')
   .description('Authenticate with an AI provider')
   .option('-p, --provider <name>', 'AI provider (anthropic, claude)')
-  .action(async (options) => {
-    await authCommand(options);
-  });
+  .action(withErrorHandling(authCommand, { commandName: 'auth' }));
 
 authCmd
   .command('status')
   .description('Show authentication status')
-  .action(async () => {
-    await authStatusCommand();
-  });
+  .action(withErrorHandling(authStatusCommand, { commandName: 'auth-status' }));
 
 authCmd
   .command('revoke')
   .description('Revoke stored credentials')
-  .action(async () => {
-    await authRevokeCommand();
-  });
+  .action(withErrorHandling(authRevokeCommand, { commandName: 'auth-revoke' }));
 
 // Default auth action (login)
-authCmd.action(async () => {
-  await authCommand({});
-});
+authCmd.action(withErrorHandling(() => authCommand({}), { commandName: 'auth' }));
 
 // Validate command
 program
@@ -58,9 +54,7 @@ program
   .description('Validate your onboarding spec')
   .option('-s, --spec <path>', 'Path to spec file (default: spec.md)')
   .option('-v, --verbose', 'Show detailed output')
-  .action(async (options) => {
-    await validateCommand(options);
-  });
+  .action(withErrorHandling(validateCommand, { commandName: 'validate' }));
 
 program
   .command('generate')
@@ -70,22 +64,28 @@ program
   .option('-v, --verbose', 'Show detailed output')
   .option('--dry-run', 'Preview what would be generated without writing files')
   .option('--overwrite', 'Overwrite existing output directory')
-  .action(async (options) => {
-    await generateCommand(options);
-  });
+  .action(withErrorHandling(generateCommand, { commandName: 'generate' }));
 
+// Onboard command - Full AI-powered workflow
 program
   .command('onboard')
   .description('Run full AI-powered workflow with 7 phases')
-  .action(() => {
-    console.log('onboard command - coming soon');
-  });
+  .option('-s, --spec <path>', 'Path to spec file (default: spec.md)')
+  .option('-o, --output <path>', 'Output directory (default: onboardkit-output)')
+  .option('--ai-repair', 'Automatically repair validation errors with AI')
+  .option('--ai-enhance', 'Enhance copy with AI improvements')
+  .option('--skip-refinement', 'Skip optional refinement phase (default: true)')
+  .option('-v, --verbose', 'Show detailed output')
+  .option('--dry-run', 'Preview workflow without writing files')
+  .option('--overwrite', 'Overwrite existing output directory')
+  .action(withErrorHandling(onboardCommand, { commandName: 'onboard' }));
 
+// Reset command - Clear checkpoints
 program
   .command('reset')
   .description('Clear workflow checkpoints')
-  .action(() => {
-    console.log('reset command - coming soon');
-  });
+  .option('-s, --spec <path>', 'Path to spec file (default: spec.md)')
+  .option('-f, --force', 'Skip confirmation prompt')
+  .action(withErrorHandling(resetCommand, { commandName: 'reset' }));
 
 program.parse(process.argv);
