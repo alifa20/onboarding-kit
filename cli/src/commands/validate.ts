@@ -6,6 +6,7 @@ import pc from 'picocolors';
 import { parseMarkdown } from '../lib/spec/parser.js';
 import { validateSpec, formatValidationErrors, getSpecFeatures } from '../lib/spec/validator.js';
 import { computeSpecHash } from '../lib/spec/hash.js';
+import { FileSystemError, ValidationError, ErrorCode, withFileSystemErrors } from '../lib/errors/index.js';
 
 /**
  * Validate command options
@@ -26,22 +27,20 @@ export async function validateCommand(options: ValidateOptions = {}): Promise<vo
 
   // Check if spec file exists
   if (!existsSync(specPath)) {
-    log.error(
-      pc.red('✗ ') +
-        `Spec file not found: ${pc.dim(specPath)}\n\n` +
-        pc.dim('Run ') +
-        pc.cyan('onboardkit init') +
-        pc.dim(' to create a new spec file.')
-    );
-    process.exit(1);
+    throw new FileSystemError('Spec file not found', specPath, {
+      code: ErrorCode.SPEC_NOT_FOUND,
+    });
   }
 
   const s = spinner();
   s.start('Parsing spec file...');
 
   try {
-    // Read spec file
-    const content = await readFile(specPath, 'utf-8');
+    // Read spec file with error handling
+    const content = await withFileSystemErrors(
+      async () => readFile(specPath, 'utf-8'),
+      specPath
+    );
 
     // Parse markdown
     const parsed = await parseMarkdown(content);
@@ -60,7 +59,13 @@ export async function validateCommand(options: ValidateOptions = {}): Promise<vo
     if (!result.success) {
       s.stop(pc.red('✗ Validation failed'));
       console.log('\n' + formatValidationErrors(result.errors));
-      process.exit(1);
+      throw new ValidationError('Spec validation failed', {
+        code: ErrorCode.SPEC_VALIDATION_ERROR,
+        contextData: {
+          errorCount: result.errors.length,
+          errors: result.errors,
+        },
+      });
     }
 
     // Compute hash

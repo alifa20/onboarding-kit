@@ -3,6 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
 import pc from 'picocolors';
+import { FileSystemError, ErrorCode, withFileSystemErrors } from '../lib/errors/index.js';
 
 /**
  * Init command: Create a new onboarding spec from template
@@ -103,8 +104,11 @@ export async function initCommand(): Promise<void> {
     welcomeSubtext: welcomeSubtext as string,
   });
 
-  // Write spec file
-  await writeFile(specPath, specContent, 'utf-8');
+  // Write spec file with error handling
+  await withFileSystemErrors(
+    async () => writeFile(specPath, specContent, 'utf-8'),
+    specPath
+  );
 
   outro(
     pc.green('✓ ') +
