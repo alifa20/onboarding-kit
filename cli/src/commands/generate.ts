@@ -6,7 +6,7 @@ import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import { promises as fs } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { parseMarkdownSpec } from '../lib/spec/parser.js';
+import { parseMarkdown } from '../lib/spec/parser.js';
 import { validateSpec } from '../lib/spec/validator.js';
 import { renderTemplates } from '../lib/templates/renderer.js';
 import {
@@ -75,7 +75,7 @@ export async function generateCommand(options: GenerateOptions): Promise<void> {
 
     let parsedSpec;
     try {
-      parsedSpec = await parseMarkdownSpec(specContent);
+      parsedSpec = await parseMarkdown(specContent);
     } catch (error) {
       spinner.stop('Failed to parse spec file');
       p.outro(pc.red(`✖ Error parsing spec: ${(error as Error).message}`));

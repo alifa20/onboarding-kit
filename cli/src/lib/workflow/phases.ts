@@ -20,7 +20,7 @@ import { enhanceSpec } from '../ai/operations/enhance.js';
 import { renderTemplates } from '../templates/renderer.js';
 import { ensureOutputDirectory } from '../output/manager.js';
 import { writeFiles } from '../output/writer.js';
-import { createMetadata } from '../output/metadata.js';
+import { createFileMetadata, createOutputManifest } from '../output/metadata.js';
 import { formatGenerationSummary } from '../output/summary.js';
 import type {
   Checkpoint,
@@ -379,12 +379,14 @@ export async function executeFinalize(
 
     if (finalSpec) {
       // Create metadata
-      const metadata = createMetadata(finalSpec, {
+      const metadata = {
+        spec: finalSpec,
         specPath: checkpoint.specPath,
         outputPath: checkpoint.outputPath,
         specHash: checkpoint.specHash,
         timestamp: checkpoint.timestamp,
-      });
+        generated: new Date().toISOString(),
+      };
 
       // Write metadata file
       const metadataPath = join(checkpoint.outputPath, '.onboardkit-metadata.json');

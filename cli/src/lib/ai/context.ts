@@ -1,5 +1,5 @@
 import { AIMessage, ConversationContext } from './types.js';
-import { createHash } from '../spec/hash.js';
+import { computeHash } from '../spec/hash.js';
 import { OnboardingSpec } from '../spec/schema.js';
 
 /**
@@ -22,7 +22,7 @@ export function createContext(
   return {
     messages: [],
     metadata: {
-      specHash: spec ? createHash(JSON.stringify(spec)) : undefined,
+      specHash: spec ? computeHash(JSON.stringify(spec)) : undefined,
       lastOperation: operation,
       timestamp: Date.now(),
     },
