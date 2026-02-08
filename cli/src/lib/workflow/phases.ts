@@ -2,7 +2,7 @@
  * Implementation of all 7 workflow phases
  */
 
-import { readFile, existsSync } from 'node:fs';
+import { readFile, existsSync, mkdir, writeFile } from 'node:fs';
 import { join } from 'node:path';
 import * as clack from '@clack/prompts';
 import pc from 'picocolors';
@@ -22,6 +22,13 @@ import { ensureOutputDirectory } from '../output/manager.js';
 import { writeFiles } from '../output/writer.js';
 import { createFileMetadata, createOutputManifest } from '../output/metadata.js';
 import { formatGenerationSummary } from '../output/summary.js';
+import {
+  buildStitchPrompts,
+  formatPromptsAsMarkdown,
+  isStitchMCPAvailable,
+  createStitchProject,
+  generateAllScreens,
+} from '../stitch/index.js';
 import type {
   Checkpoint,
   WorkflowOptions,
@@ -332,7 +339,7 @@ export async function executeRefinement(
 
 /**
  * Phase 7: Finalize
- * Write all files to disk atomically
+ * Write all files to disk atomically and optionally generate Stitch designs
  */
 export async function executeFinalize(
   checkpoint: Checkpoint,
@@ -392,13 +399,92 @@ export async function executeFinalize(
       const metadataPath = join(checkpoint.outputPath, '.onboardkit-metadata.json');
       if (!options.dryRun) {
         await new Promise<void>((resolve, reject) => {
-          import('node:fs').then(({ writeFile }) => {
-            writeFile(metadataPath, JSON.stringify(metadata, null, 2), 'utf-8', (err) => {
+          writeFile(metadataPath, JSON.stringify(metadata, null, 2), 'utf-8', (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+      }
+
+      // Generate Stitch prompts
+      const stitchPrompts = buildStitchPrompts(finalSpec);
+      const promptFiles = formatPromptsAsMarkdown(stitchPrompts);
+
+      // Write Stitch prompts to disk (always, for manual use)
+      const promptsDir = join(checkpoint.outputPath, 'stitch-prompts');
+      if (!options.dryRun) {
+        await new Promise<void>((resolve, reject) => {
+          mkdir(promptsDir, { recursive: true }, (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+
+        for (const [filename, content] of promptFiles.entries()) {
+          const promptPath = join(promptsDir, filename);
+          await new Promise<void>((resolve, reject) => {
+            writeFile(promptPath, content, 'utf-8', (err) => {
               if (err) reject(err);
               else resolve();
             });
           });
+        }
+      }
+
+      // Check if Stitch MCP is available
+      if (!options.dryRun && isStitchMCPAvailable()) {
+        const shouldConnectToStitch = await clack.confirm({
+          message: 'Connect to Stitch MCP to generate UI designs?',
+          initialValue: false,
         });
+
+        if (shouldConnectToStitch && !clack.isCancel(shouldConnectToStitch)) {
+          const spinner = clack.spinner();
+          spinner.start('Creating Stitch project...');
+
+          try {
+            // Create Stitch project
+            const project = await createStitchProject(finalSpec.projectName);
+            spinner.message(`Creating screens in Stitch (${stitchPrompts.length} screens)...`);
+
+            // Generate all screens
+            const results = await generateAllScreens(project.projectId, stitchPrompts);
+
+            spinner.stop(pc.green('✓ Stitch designs generated'));
+
+            // Display results
+            clack.log.info('Stitch Design URLs:');
+            for (const result of results) {
+              if (result.success && result.screen.previewUrl) {
+                clack.log.message(
+                  `  ${pc.cyan(result.screen.title)}: ${pc.dim(result.screen.previewUrl)}`
+                );
+              } else {
+                clack.log.warning(
+                  `  ${pc.yellow(result.screen.title)}: ${pc.red(result.error || 'Failed')}`
+                );
+              }
+            }
+
+            clack.note(
+              `Project: ${pc.cyan(project.name)}\n` +
+                `Screens: ${results.filter((r) => r.success).length}/${results.length} successful`,
+              'Stitch Summary'
+            );
+          } catch (error) {
+            spinner.stop(pc.red('✗ Failed to connect to Stitch'));
+            clack.log.error(
+              `Stitch error: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+            clack.log.info('Stitch prompts saved to stitch-prompts/ for manual use');
+          }
+        } else {
+          clack.log.info('Stitch prompts saved to stitch-prompts/ for later use');
+        }
+      } else if (!options.dryRun) {
+        clack.log.info(
+          'Stitch MCP not available. Prompts saved to stitch-prompts/ for manual use'
+        );
       }
     }
 

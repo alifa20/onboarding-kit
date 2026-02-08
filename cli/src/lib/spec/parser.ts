@@ -122,8 +122,13 @@ function parseList(list: List): Record<string, unknown> {
           })
           .filter((item): item is string => item !== null);
 
-        // Check if it's a features list or plans list
-        if (camelKey === 'features' || camelKey === 'plans') {
+        // Check if it's a features list, plans list, methods list, or fields list
+        if (
+          camelKey === 'features' ||
+          camelKey === 'plans' ||
+          camelKey === 'methods' ||
+          camelKey === 'fields'
+        ) {
           value = nestedItems;
         }
       }
