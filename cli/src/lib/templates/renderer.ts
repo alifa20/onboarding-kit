@@ -76,7 +76,7 @@ export async function renderTemplates(spec: OnboardingSpec): Promise<RenderResul
     const compiled = await loadTemplate(`theme/${template}`);
     const rendered = compiled(context);
     const formatted = await formatCode(rendered);
-    const filename = template.replace('.hbs', '');
+    const filename = template.replace('.hbs', '.ts');
     files.push({
       path: `theme/${filename}`,
       content: formatted,
@@ -180,6 +180,28 @@ export async function renderTemplates(spec: OnboardingSpec): Promise<RenderResul
     files.push({
       path: 'screens/NameCaptureScreen.tsx',
       content: signupFormatted,
+    });
+  }
+
+  // Screen: Soft Paywall (if exists)
+  if (spec.softPaywall) {
+    const softPaywallTemplate = await loadTemplate('screens/soft-paywall.hbs');
+    const softPaywallRendered = softPaywallTemplate(context);
+    const softPaywallFormatted = await formatCode(softPaywallRendered);
+    files.push({
+      path: 'screens/SoftPaywallScreen.tsx',
+      content: softPaywallFormatted,
+    });
+  }
+
+  // Screen: Hard Paywall (if exists)
+  if (spec.hardPaywall) {
+    const hardPaywallTemplate = await loadTemplate('screens/hard-paywall.hbs');
+    const hardPaywallRendered = hardPaywallTemplate(context);
+    const hardPaywallFormatted = await formatCode(hardPaywallRendered);
+    files.push({
+      path: 'screens/HardPaywallScreen.tsx',
+      content: hardPaywallFormatted,
     });
   }
 
