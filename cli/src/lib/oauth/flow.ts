@@ -9,17 +9,22 @@ export function buildAuthorizationUrl(
   provider: OAuthProvider,
   pkceState: PKCEState
 ): string {
-  const params = new URLSearchParams({
-    client_id: provider.clientId,
+  const params: Record<string, string> = {
     response_type: 'code',
     redirect_uri: pkceState.redirectUri,
     state: pkceState.state,
     code_challenge: pkceState.codeChallenge,
     code_challenge_method: 'S256',
     scope: provider.scopes.join(' '),
-  });
+  };
 
-  return `${provider.authorizationEndpoint}?${params.toString()}`;
+  // Only include client_id if provider has one (not required for Anthropic's public OAuth)
+  if (provider.clientId) {
+    params.client_id = provider.clientId;
+  }
+
+  const searchParams = new URLSearchParams(params);
+  return `${provider.authorizationEndpoint}?${searchParams.toString()}`;
 }
 
 /**
@@ -31,13 +36,19 @@ export async function exchangeCodeForTokens(
   codeVerifier: string,
   redirectUri: string
 ): Promise<OAuthTokens> {
-  const params = new URLSearchParams({
+  const params: Record<string, string> = {
     grant_type: 'authorization_code',
     code,
     code_verifier: codeVerifier,
-    client_id: provider.clientId,
     redirect_uri: redirectUri,
-  });
+  };
+
+  // Only include client_id if provider has one
+  if (provider.clientId) {
+    params.client_id = provider.clientId;
+  }
+
+  const searchParams = new URLSearchParams(params);
 
   try {
     const response = await fetch(provider.tokenEndpoint, {
@@ -46,7 +57,7 @@ export async function exchangeCodeForTokens(
         'Content-Type': 'application/x-www-form-urlencoded',
         Accept: 'application/json',
       },
-      body: params.toString(),
+      body: searchParams.toString(),
     });
 
     if (!response.ok) {
@@ -85,11 +96,17 @@ export async function refreshAccessToken(
     throw new OAuthError(`Provider ${provider.name} does not support token refresh`);
   }
 
-  const params = new URLSearchParams({
+  const params: Record<string, string> = {
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
-    client_id: provider.clientId,
-  });
+  };
+
+  // Only include client_id if provider has one
+  if (provider.clientId) {
+    params.client_id = provider.clientId;
+  }
+
+  const searchParams = new URLSearchParams(params);
 
   try {
     const response = await fetch(provider.tokenEndpoint, {
@@ -98,7 +115,7 @@ export async function refreshAccessToken(
         'Content-Type': 'application/x-www-form-urlencoded',
         Accept: 'application/json',
       },
-      body: params.toString(),
+      body: searchParams.toString(),
     });
 
     if (!response.ok) {

@@ -39,53 +39,35 @@ import type { OnboardingSpec } from '../spec/schema.js';
 
 /**
  * Phase 1: Auth Check
- * Verify OAuth credentials exist and are valid
+ * Verify API key exists and is valid
  */
 export async function executeAuthCheck(
   checkpoint: Checkpoint,
   options: WorkflowOptions
 ): Promise<PhaseResult<void>> {
   try {
-    // Check if any providers are authenticated
-    const storedProviders = await listStoredProviders();
+    // Import API key auth functions
+    const { hasApiKey, loadApiKey } = await import('../auth/index.js');
 
-    if (storedProviders.length === 0) {
+    // Check if API key exists
+    if (!(await hasApiKey())) {
       return {
         success: false,
-        error: 'No authentication found. Run "onboardkit auth" first.',
+        error: 'No API key found. Run "onboardkit auth" to configure your Anthropic API key.',
       };
     }
 
-    // Get the first provider (for now we only support one)
-    const providerName = storedProviders[0];
-    const provider = getProvider(providerName);
-
-    if (!provider) {
+    // Load API key
+    const apiKey = await loadApiKey();
+    if (!apiKey) {
       return {
         success: false,
-        error: `Provider not found: ${providerName}`,
+        error: 'Could not load API key. Run "onboardkit auth" to reconfigure.',
       };
     }
 
-    // Check credential status
-    const status = await getCredentialStatus(provider);
-
-    if (status.isExpired && !status.canRefresh) {
-      return {
-        success: false,
-        error: 'Authentication expired. Please re-authenticate with "onboardkit auth".',
-      };
-    }
-
-    // Try to get a valid access token (will refresh if needed)
-    try {
-      await getValidAccessToken(provider);
-    } catch (error) {
-      return {
-        success: false,
-        error: `Failed to get valid access token: ${error}`,
-      };
-    }
+    // Store API key in checkpoint for use by AI operations
+    checkpoint.data.apiKey = apiKey;
 
     return { success: true };
   } catch (error) {

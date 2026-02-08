@@ -1,245 +1,104 @@
 import * as clack from '@clack/prompts';
 import pc from 'picocolors';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import {
-  getProvider,
-  listProviders,
-  isProviderConfigured,
-  executeOAuthFlow,
-  saveTokens,
-  revokeTokens,
-  getCredentialStatus,
-  listStoredProviders,
-  OAuthError,
-} from '../lib/oauth/index.js';
+  saveApiKey,
+  loadApiKey,
+  hasApiKey,
+  isValidApiKey,
+  testApiKey,
+  removeApiKey,
+} from '../lib/auth/index.js';
 
-const execAsync = promisify(exec);
+// Removed unused functions
 
 /**
- * Open URL in default browser
+ * API Key Authentication
  */
-async function openBrowser(url: string): Promise<void> {
-  const platform = process.platform;
+export async function authCommand(options: { apiKey?: string }): Promise<void> {
+  clack.intro(pc.bgCyan(pc.black(' Anthropic API Key Setup ')));
 
   try {
-    if (platform === 'darwin') {
-      await execAsync(`open "${url}"`);
-    } else if (platform === 'win32') {
-      await execAsync(`start "" "${url}"`);
-    } else {
-      // Linux and others
-      await execAsync(`xdg-open "${url}"`);
-    }
-  } catch (err) {
-    throw new Error(`Failed to open browser: ${err}`);
-  }
-}
+    let apiKey = options.apiKey;
 
-/**
- * Format timestamp for display
- */
-function formatTimestamp(timestamp?: number): string {
-  if (!timestamp) return 'Unknown';
-
-  const date = new Date(timestamp);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffDays > 0) {
-    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
-  } else if (diffHours > 0) {
-    return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-  } else if (diffMins > 0) {
-    return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
-  } else {
-    return 'just now';
-  }
-}
-
-/**
- * Format expiration time
- */
-function formatExpiration(expiresAt?: number): string {
-  if (!expiresAt) return 'Never';
-
-  const now = Date.now();
-  const diffMs = expiresAt - now;
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffMs < 0) {
-    return pc.red('Expired');
-  }
-
-  if (diffDays > 0) {
-    return pc.green(`${diffDays} day${diffDays > 1 ? 's' : ''}`);
-  } else if (diffHours > 0) {
-    return pc.yellow(`${diffHours} hour${diffHours > 1 ? 's' : ''}`);
-  } else if (diffMins > 0) {
-    return pc.yellow(`${diffMins} minute${diffMins > 1 ? 's' : ''}`);
-  } else {
-    return pc.red('Expiring soon');
-  }
-}
-
-/**
- * Execute OAuth authentication flow
- */
-export async function authCommand(options: { provider?: string }): Promise<void> {
-  clack.intro(pc.bgCyan(pc.black(' OAuth Authentication ')));
-
-  try {
-    // Get provider from option or prompt user
-    let providerName = options.provider;
-
-    if (!providerName) {
-      const availableProviders = listProviders();
-
-      if (availableProviders.length === 0) {
-        clack.outro(pc.red('No OAuth providers configured'));
-        process.exit(1);
-      }
-
-      if (availableProviders.length === 1) {
-        providerName = availableProviders[0].name;
-        clack.log.info(`Using ${availableProviders[0].displayName}`);
-      } else {
-        const selected = await clack.select({
-          message: 'Select AI provider:',
-          options: availableProviders.map((p) => ({
-            value: p.name,
-            label: p.displayName,
-          })),
-        });
-
-        if (clack.isCancel(selected)) {
-          clack.cancel('Operation cancelled');
-          process.exit(0);
-        }
-
-        providerName = selected as string;
-      }
-    }
-
-    const provider = getProvider(providerName);
-
-    if (!provider) {
-      clack.outro(pc.red(`Unknown provider: ${providerName}`));
-      process.exit(1);
-    }
-
-    // Check if provider is configured
-    if (!isProviderConfigured(provider)) {
-      clack.log.error(
-        `${provider.displayName} is not configured. Please set the client ID.`
-      );
-      clack.outro(pc.red('Authentication failed'));
-      process.exit(1);
-    }
-
-    const spinner = clack.spinner();
-
-    // Start OAuth flow
-    spinner.start('Starting OAuth flow...');
-
-    try {
-      // Start callback server and get auth URL
-      const port = 3000;
-      spinner.message('Starting local callback server...');
-
-      // We need to structure this differently since executeOAuthFlow waits for callback
-      // Let's use the lower-level functions instead
-      const {
-        generateCodeVerifier,
-        generateCodeChallenge,
-        generateState,
-        buildAuthorizationUrl,
-        startCallbackServer,
-        getRedirectUri,
-        exchangeCodeForTokens,
-      } = await import('../lib/oauth/index.js');
-
-      const codeVerifier = generateCodeVerifier();
-      const codeChallenge = generateCodeChallenge(codeVerifier);
-      const state = generateState();
-      const redirectUri = getRedirectUri(port);
-
-      const authUrl = buildAuthorizationUrl(provider, {
-        codeVerifier,
-        codeChallenge,
-        state,
-        redirectUri,
+    // Check if already has API key
+    if (!apiKey && (await hasApiKey())) {
+      const useExisting = await clack.confirm({
+        message: 'API key already configured. Do you want to replace it?',
+        initialValue: false,
       });
 
-      spinner.stop('Callback server started');
-
-      // Show instructions
-      clack.log.info(`Opening browser for authorization...`);
-      clack.log.info(`If browser doesn't open, visit:\n${pc.cyan(authUrl)}`);
-
-      // Open browser
-      try {
-        await openBrowser(authUrl);
-        clack.log.success('Browser opened');
-      } catch (err) {
-        clack.log.warn('Could not open browser automatically');
+      if (clack.isCancel(useExisting)) {
+        clack.cancel('Operation cancelled');
+        process.exit(0);
       }
 
-      // Wait for callback
-      spinner.start('Waiting for authorization...');
-      const callback = await startCallbackServer(port);
-
-      // Verify state
-      if (callback.state !== state) {
-        spinner.stop('State verification failed');
-        throw new OAuthError('State mismatch - possible CSRF attack');
+      if (!useExisting) {
+        clack.outro(pc.green('Using existing API key'));
+        return;
       }
+    }
 
-      spinner.message('Exchanging authorization code for tokens...');
-
-      // Exchange code for tokens
-      const tokens = await exchangeCodeForTokens(
-        provider,
-        callback.code,
-        codeVerifier,
-        redirectUri
+    // Prompt for API key if not provided
+    if (!apiKey) {
+      clack.note(
+        `Get your API key from:\n${pc.cyan('https://console.anthropic.com/settings/keys')}`,
+        'API Key Required'
       );
 
-      spinner.message('Saving credentials...');
+      const input = await clack.text({
+        message: 'Enter your Anthropic API key:',
+        placeholder: 'sk-ant-...',
+        validate: (value) => {
+          if (!value) return 'API key is required';
+          if (!isValidApiKey(value)) {
+            return 'Invalid API key format. Should start with "sk-ant-"';
+          }
+        },
+      });
 
-      // Save tokens
-      await saveTokens(provider, tokens);
-
-      spinner.stop('Credentials saved');
-
-      clack.log.success(`Successfully authenticated with ${provider.displayName}!`);
-
-      // Show expiration info if available
-      if (tokens.expires_in) {
-        const expiresIn = Math.floor(tokens.expires_in / 3600);
-        clack.log.info(`Access token expires in ${expiresIn} hours`);
+      if (clack.isCancel(input)) {
+        clack.cancel('Operation cancelled');
+        process.exit(0);
       }
 
-      clack.outro(pc.green('Authentication complete ✓'));
-    } catch (err) {
-      spinner.stop('Authentication failed');
+      apiKey = input as string;
+    }
 
-      if (err instanceof OAuthError) {
-        clack.log.error(err.message);
-      } else {
-        clack.log.error(`Unexpected error: ${err}`);
-      }
-
-      clack.outro(pc.red('Authentication failed'));
+    // Validate API key
+    if (!isValidApiKey(apiKey)) {
+      clack.outro(pc.red('Invalid API key format. Should start with "sk-ant-"'));
       process.exit(1);
     }
+
+    // Test API key
+    const spinner = clack.spinner();
+    spinner.start('Testing API key...');
+
+    const isValid = await testApiKey(apiKey);
+
+    if (!isValid) {
+      spinner.stop('API key test failed');
+      clack.outro(pc.red('Invalid API key. Please check your key and try again.'));
+      process.exit(1);
+    }
+
+    spinner.message('Saving API key...');
+
+    // Save API key
+    await saveApiKey(apiKey);
+
+    spinner.stop('API key saved');
+
+    clack.log.success('Successfully configured Anthropic API key!');
+    clack.note(
+      `Your API key is saved to:\n${pc.dim('~/.onboardkit/api-key.txt')}\n\n` +
+        `You can also use the ANTHROPIC_API_KEY environment variable.`,
+      'Configuration'
+    );
+
+    clack.outro(pc.green('Authentication complete ✓'));
   } catch (err) {
-    clack.log.error(`Fatal error: ${err}`);
+    clack.log.error(`Error: ${err}`);
     clack.outro(pc.red('Authentication failed'));
     process.exit(1);
   }
@@ -252,39 +111,25 @@ export async function authStatusCommand(): Promise<void> {
   clack.intro(pc.bgCyan(pc.black(' Authentication Status ')));
 
   try {
-    const storedProviders = await listStoredProviders();
+    const hasKey = await hasApiKey();
 
-    if (storedProviders.length === 0) {
-      clack.log.warn('No authenticated providers found');
-      clack.outro(pc.yellow('Run "onboardkit auth" to authenticate'));
+    if (!hasKey) {
+      clack.log.warn('No API key configured');
+      clack.outro(pc.yellow('Run "onboardkit auth" to configure your API key'));
       return;
     }
 
-    for (const providerName of storedProviders) {
-      const provider = getProvider(providerName);
-
-      if (!provider) {
-        continue;
-      }
-
-      const status = await getCredentialStatus(provider);
-
-      const statusIcon = status.isExpired ? pc.red('✗') : pc.green('✓');
-      const statusText = status.isExpired ? pc.red('Expired') : pc.green('Active');
-
-      clack.log.info(`${statusIcon} ${pc.bold(provider.displayName)}`);
-      clack.log.info(`  Status: ${statusText}`);
-
-      if (status.expiresAt) {
-        clack.log.info(`  Expires: ${formatExpiration(status.expiresAt)}`);
-      }
-
-      if (status.canRefresh) {
-        clack.log.info(`  Refresh: ${pc.green('Available')}`);
-      }
-
-      console.log(); // Empty line
+    const apiKey = await loadApiKey();
+    if (!apiKey) {
+      clack.log.warn('Could not load API key');
+      clack.outro(pc.yellow('Run "onboardkit auth" to configure your API key'));
+      return;
     }
+
+    clack.log.info(`${pc.green('✓')} ${pc.bold('Anthropic API Key')}`);
+    clack.log.info(`  Status: ${pc.green('Configured')}`);
+    clack.log.info(`  Key: ${pc.dim(apiKey.substring(0, 20))}...`);
+    clack.log.info(`  Source: ${process.env.ANTHROPIC_API_KEY ? 'Environment Variable' : 'Config File'}`);
 
     clack.outro(pc.green('Status check complete'));
   } catch (err) {
@@ -298,20 +143,20 @@ export async function authStatusCommand(): Promise<void> {
  * Revoke authentication
  */
 export async function authRevokeCommand(): Promise<void> {
-  clack.intro(pc.bgRed(pc.white(' Revoke Authentication ')));
+  clack.intro(pc.bgRed(pc.white(' Remove API Key ')));
 
   try {
-    const storedProviders = await listStoredProviders();
+    const hasKey = await hasApiKey();
 
-    if (storedProviders.length === 0) {
-      clack.log.warn('No authenticated providers found');
-      clack.outro(pc.yellow('Nothing to revoke'));
+    if (!hasKey) {
+      clack.log.warn('No API key configured');
+      clack.outro(pc.yellow('Nothing to remove'));
       return;
     }
 
     // Confirm action
     const confirm = await clack.confirm({
-      message: 'Are you sure you want to revoke all stored credentials?',
+      message: 'Are you sure you want to remove your stored API key?',
     });
 
     if (clack.isCancel(confirm) || !confirm) {
@@ -320,20 +165,18 @@ export async function authRevokeCommand(): Promise<void> {
     }
 
     const spinner = clack.spinner();
-    spinner.start('Revoking credentials...');
+    spinner.start('Removing API key...');
 
-    // Revoke all providers
-    for (const providerName of storedProviders) {
-      await revokeTokens(providerName);
-    }
+    // Remove API key
+    await removeApiKey();
 
-    spinner.stop('Credentials revoked');
+    spinner.stop('API key removed');
 
-    clack.log.success('All credentials have been removed');
-    clack.outro(pc.green('Revocation complete'));
+    clack.log.success('API key has been removed');
+    clack.outro(pc.green('Removal complete'));
   } catch (err) {
-    clack.log.error(`Error revoking credentials: ${err}`);
-    clack.outro(pc.red('Revocation failed'));
+    clack.log.error(`Error removing API key: ${err}`);
+    clack.outro(pc.red('Removal failed'));
     process.exit(1);
   }
 }

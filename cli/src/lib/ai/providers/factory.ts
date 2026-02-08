@@ -1,8 +1,7 @@
 import { AIProvider } from '../types.js';
 import { AIError } from '../errors.js';
 import { createAnthropicProvider } from './anthropic.js';
-import { getValidAccessToken } from '../../oauth/index.js';
-import { ANTHROPIC_PROVIDER } from '../../oauth/providers.js';
+import { loadApiKey } from '../../auth/index.js';
 
 /**
  * Supported AI provider names
@@ -20,9 +19,15 @@ export async function createProvider(
 
   switch (normalizedName) {
     case 'anthropic': {
-      // Get access token from OAuth if not provided
-      const token = accessToken || (await getValidAccessToken(ANTHROPIC_PROVIDER));
-      return createAnthropicProvider(token);
+      // Get API key if not provided
+      const apiKey = accessToken || (await loadApiKey());
+      if (!apiKey) {
+        throw new AIError(
+          'No Anthropic API key found. Run "onboardkit auth" to configure your API key.',
+          'NO_API_KEY'
+        );
+      }
+      return createAnthropicProvider(apiKey);
     }
 
     default:

@@ -158,10 +158,21 @@ export async function startCallbackServer(
         const url = new URL(req.url, `http://localhost:${port}`);
 
         // Check for OAuth callback parameters
-        const code = url.searchParams.get('code');
-        const state = url.searchParams.get('state');
+        // Anthropic uses code#state format in URL hash, so check both query params and hash
+        let code = url.searchParams.get('code');
+        let state = url.searchParams.get('state');
         const error = url.searchParams.get('error');
         const errorDescription = url.searchParams.get('error_description');
+
+        // Handle Anthropic's code#state format in URL hash
+        if (!code && url.hash && url.hash.includes('#')) {
+          const hashPart = url.hash.substring(1); // Remove leading #
+          const hashParts = hashPart.split('#');
+          if (hashParts.length === 2) {
+            code = hashParts[0];
+            state = hashParts[1];
+          }
+        }
 
         if (error) {
           // OAuth error from provider
