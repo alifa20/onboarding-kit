@@ -40,23 +40,12 @@ export class AnthropicProvider implements AIProvider {
   private model: string;
 
   constructor(apiKey: string, model: string = DEFAULT_MODEL) {
-    // Detect OAuth token (sk-ant-oat01-) vs API key (sk-ant-api03-)
-    const isOAuthToken = apiKey.includes('-oat01-');
-
-    if (isOAuthToken) {
-      // OAuth tokens use Bearer authentication via authToken parameter
-      this.client = new Anthropic({
-        authToken: apiKey,
-        timeout: DEFAULT_OPTIONS.timeout,
-      });
-    } else {
-      // API keys use x-api-key header via apiKey parameter
-      this.client = new Anthropic({
-        apiKey,
-        timeout: DEFAULT_OPTIONS.timeout,
-      });
-    }
-
+    // Note: OAuth tokens (sk-ant-oat01-) do NOT work with the Anthropic API
+    // The API only accepts API keys (sk-ant-api03-) via x-api-key header
+    this.client = new Anthropic({
+      apiKey,
+      timeout: DEFAULT_OPTIONS.timeout,
+    });
     this.model = model;
   }
 

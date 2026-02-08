@@ -57,9 +57,8 @@ export async function hasApiKey(): Promise<boolean> {
  */
 export function isValidApiKey(apiKey: string): boolean {
   // Anthropic API keys: sk-ant-api03-...
-  // OAuth tokens: sk-ant-oat01-...
-  // Both start with "sk-ant-" and are reasonably long
-  return apiKey.startsWith('sk-ant-') && apiKey.length > 40;
+  // OAuth tokens (sk-ant-oat01-) do NOT work with the API
+  return apiKey.startsWith('sk-ant-api') && apiKey.length > 40;
 }
 
 /**
@@ -67,24 +66,13 @@ export function isValidApiKey(apiKey: string): boolean {
  */
 export async function testApiKey(apiKey: string): Promise<boolean> {
   try {
-    // Detect if this is an OAuth token (sk-ant-oat01-) vs API key (sk-ant-api03-)
-    const isOAuthToken = apiKey.includes('-oat01-');
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'anthropic-version': '2023-06-01',
-    };
-
-    // OAuth tokens use Bearer authentication, API keys use x-api-key header
-    if (isOAuthToken) {
-      headers['Authorization'] = `Bearer ${apiKey}`;
-    } else {
-      headers['x-api-key'] = apiKey;
-    }
-
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
       body: JSON.stringify({
         model: 'claude-3-5-sonnet-20241022',
         max_tokens: 10,

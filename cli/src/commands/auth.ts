@@ -18,19 +18,22 @@ export async function authCommand(options: { apiKey?: string; oauth?: boolean })
   clack.intro(pc.bgCyan(pc.black(' Anthropic Authentication ')));
 
   try {
-    // If OAuth flag is set, show instructions for Claude CLI
+    // If OAuth flag is set, show the reality about OAuth
     if (options.oauth) {
       clack.note(
-        `Anthropic OAuth is restricted to official Claude applications.\n\n` +
-          `For Claude Pro/Max subscriptions, use:\n` +
-          `${pc.cyan('claude setup-token')}\n\n` +
-          `This generates a token that can be used as:\n` +
-          `${pc.cyan('export ANTHROPIC_API_KEY=$(cat ~/.anthropic/token.txt)')}\n\n` +
-          `Then run ${pc.cyan('npx onboardkit onboard spec.md')}`,
-        'OAuth Information'
+        `${pc.red('⚠ OAuth tokens do NOT work with Anthropic API')}\n\n` +
+          `OAuth tokens from Claude Code (sk-ant-oat01-) are restricted\n` +
+          `to Claude Code only. The API returns:\n` +
+          `${pc.dim('"OAuth authentication is currently not supported."')}\n\n` +
+          `${pc.bold('You must use an API key instead:')}\n` +
+          `1. Visit ${pc.cyan('https://console.anthropic.com/settings/keys')}\n` +
+          `2. Create a new API key (sk-ant-api03-...)\n` +
+          `3. Run ${pc.cyan('npx onboardkit auth')} with that key\n\n` +
+          `${pc.dim('Source: https://jpcaparas.medium.com/claude-code-cripples-third-party-coding-agents-from-using-oauth-6548e9b49df3')}`,
+        'OAuth Reality Check'
       );
-      clack.outro(pc.yellow('Use API key authentication instead (run without --oauth flag)'));
-      return;
+      clack.outro(pc.red('OAuth tokens are not supported. Use API keys.'));
+      process.exit(1);
     }
 
     let apiKey = options.apiKey;
@@ -56,22 +59,21 @@ export async function authCommand(options: { apiKey?: string; oauth?: boolean })
     // Prompt for API key if not provided
     if (!apiKey) {
       clack.note(
-        `${pc.bold('Option 1:')} API Key (Recommended)\n` +
-          `Get your API key from:\n${pc.cyan('https://console.anthropic.com/settings/keys')}\n\n` +
-          `${pc.bold('Option 2:')} Claude Pro/Max Subscription\n` +
-          `If you have Claude Pro/Max, run:\n${pc.cyan('claude setup-token')}\n` +
-          `Then use that token as your API key`,
-        'Authentication Options'
+        `${pc.bold('Get your API key from:')}\n` +
+          `${pc.cyan('https://console.anthropic.com/settings/keys')}\n\n` +
+          `${pc.yellow('⚠ Note:')} OAuth tokens (sk-ant-oat01-) from Claude Code\n` +
+          `do NOT work with the Anthropic API. You need an API key\n` +
+          `that starts with ${pc.cyan('sk-ant-api03-')}`,
+        'API Key Required'
       );
 
       const input = await clack.text({
-        message: 'Enter your Anthropic API key or subscription token:',
-        placeholder: 'sk-ant-... or token from claude setup-token',
+        message: 'Enter your Anthropic API key:',
+        placeholder: 'sk-ant-api03-...',
         validate: (value) => {
           if (!value) return 'API key is required';
-          // Allow both API keys and subscription tokens
-          if (!value.startsWith('sk-ant-') && value.length < 20) {
-            return 'Invalid format. Should start with "sk-ant-" or be a subscription token';
+          if (!value.startsWith('sk-ant-api')) {
+            return 'Invalid API key. Should start with "sk-ant-api03-"';
           }
         },
       });
