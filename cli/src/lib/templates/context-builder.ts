@@ -28,6 +28,7 @@ export interface TemplateContext {
   screens: {
     welcome: string;
     onboardingSteps: string[];
+    firstOnboardingStep: string;
     softPaywall?: string;
     login: string;
     nameCapture: string;
@@ -72,6 +73,7 @@ export function buildTemplateContext(spec: OnboardingSpec): TemplateContext {
     screens: {
       welcome: 'WelcomeScreen',
       onboardingSteps: spec.onboardingSteps.map((_, index) => `OnboardingStep${index + 1}Screen`),
+      firstOnboardingStep: 'OnboardingStep1Screen',
       softPaywall: hasSoftPaywall ? 'SoftPaywallScreen' : undefined,
       login: 'LoginScreen',
       nameCapture: 'NameCaptureScreen',

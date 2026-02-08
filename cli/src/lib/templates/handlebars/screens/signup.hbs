@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button } from '../components/Button';
@@ -17,36 +17,41 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'NameCapture
 export function NameCaptureScreen() {
   const navigation = useNavigation<NavigationProp>();
 
-  {{#each nameCapture.fields}}
-  const [{{camelCase this}}, set{{pascalCase this}}] = useState('');
-  const [{{camelCase this}}Error, set{{pascalCase this}}Error] = useState('');
-  {{/each}}
+  // Form state
+  const [formData, setFormData] = useState({
+    {{#each nameCapture.fields}}
+    {{camelCase this}}: '',
+    {{/each}}
+  });
 
-  const validate{{pascalCase nameCapture.fields.0}} = (value: string): boolean => {
+  const [errors, setErrors] = useState({
+    {{#each nameCapture.fields}}
+    {{camelCase this}}: '',
+    {{/each}}
+  });
+
+  const validateField = (field: string, value: string): boolean => {
     if (!value.trim()) {
-      set{{pascalCase nameCapture.fields.0}}Error('This field is required');
+      setErrors(prev => ({ ...prev, [field]: 'This field is required' }));
       return false;
     }
-    set{{pascalCase nameCapture.fields.0}}Error('');
+    setErrors(prev => ({ ...prev, [field]: '' }));
     return true;
   };
 
-  {{#if (eq nameCapture.fields.length 2)}}
-  const validate{{pascalCase nameCapture.fields.1}} = (value: string): boolean => {
-    if (!value.trim()) {
-      set{{pascalCase nameCapture.fields.1}}Error('This field is required');
-      return false;
+  const handleFieldChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    if (errors[field as keyof typeof errors]) {
+      validateField(field, value);
     }
-    set{{pascalCase nameCapture.fields.1}}Error('');
-    return true;
   };
-  {{/if}}
 
   const handleContinue = () => {
     let isValid = true;
 
+    // Validate all fields
     {{#each nameCapture.fields}}
-    if (!validate{{pascalCase this}}({{camelCase this}})) {
+    if (!validateField('{{camelCase this}}', formData['{{camelCase this}}'])) {
       isValid = false;
     }
     {{/each}}
@@ -56,7 +61,11 @@ export function NameCaptureScreen() {
       Alert.alert('Account Created', 'Welcome to {{projectName}}!', [
         {
           text: 'OK',
+          {{#if hasHardPaywall}}
+          onPress: () => navigation.navigate('HardPaywall'),
+          {{else}}
           onPress: () => navigation.navigate('Home'),
+          {{/if}}
         },
       ]);
     }
@@ -64,48 +73,54 @@ export function NameCaptureScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}
       >
-        <View style={styles.content}>
-          <View style={styles.header}>
-            <Text style={styles.headline}>{{nameCapture.headline}}</Text>
-          </View>
-
-          <View style={styles.form}>
-            {{#each nameCapture.fields}}
-            <Input
-              label="{{#if (eq this 'first_name')}}First Name{{else if (eq this 'last_name')}}Last Name{{else if (eq this 'full_name')}}Full Name{{else if (eq this 'email')}}Email{{else if (eq this 'username')}}Username{{else}}{{pascalCase this}}{{/if}}"
-              placeholder="Enter your {{#if (eq this 'first_name')}}first name{{else if (eq this 'last_name')}}last name{{else if (eq this 'full_name')}}full name{{else if (eq this 'email')}}email{{else if (eq this 'username')}}username{{else}}{{this}}{{/if}}"
-              value={ {{camelCase this}} }
-              onChangeText={set{{pascalCase this}}}
-              error={ {{camelCase this}}Error}
-              {{#if (eq this 'email')}}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              {{else}}
-              autoCapitalize="words"
-              {{/if}}
-              autoCorrect={false}
-            />
-            {{/each}}
-
-            <View style={styles.termsContainer}>
-              <Text style={styles.termsText}>
-                By continuing, you agree to our Terms of Service and Privacy Policy
-              </Text>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.content}>
+            <View style={styles.header}>
+              <Text style={styles.headline}>{{nameCapture.headline}}</Text>
             </View>
 
-            <Button
-              title="{{nameCapture.cta}}"
-              variant="primary"
-              fullWidth
-              onPress={handleContinue}
-            />
+            <View style={styles.form}>
+              {{#each nameCapture.fields}}
+              <Input
+                label="{{this}}"
+                value={formData['{{camelCase this}}']}
+                onChangeText={(value) => handleFieldChange('{{camelCase this}}', value)}
+                placeholder="Enter your {{this}}"
+                error={errors['{{camelCase this}}']}
+                autoCapitalize="words"
+                {{#if (eq this 'email')}}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                {{/if}}
+                {{#if (eq this 'phone')}}
+                keyboardType="phone-pad"
+                {{/if}}
+              />
+              {{/each}}
+
+              <View style={styles.termsContainer}>
+                <Text style={styles.termsText}>
+                  By continuing, you agree to our Terms of Service and Privacy Policy
+                </Text>
+              </View>
+
+              <Button
+                title="{{nameCapture.cta}}"
+                variant="primary"
+                fullWidth
+                onPress={handleContinue}
+              />
+            </View>
           </View>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -115,6 +130,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  keyboardView: {
+    flex: 1,
+  },
   scrollContent: {
     flexGrow: 1,
   },
@@ -122,11 +140,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.xl,
-    justifyContent: 'center',
   },
   header: {
     marginBottom: spacing.xl,
-    alignItems: 'center',
   },
   headline: {
     ...typography.h1,
@@ -134,10 +150,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   form: {
-    gap: spacing.lg,
+    gap: spacing.md,
   },
   termsContainer: {
     marginTop: spacing.sm,
+    marginBottom: spacing.md,
   },
   termsText: {
     ...typography.caption,

@@ -68,4 +68,14 @@ export function registerHelpers(): void {
   Handlebars.registerHelper('isLast', function (this: unknown, index: number, array: unknown[]) {
     return index === array.length - 1;
   });
+
+  // Get array item by index
+  Handlebars.registerHelper('at', (array: unknown[], index: number) => {
+    return Array.isArray(array) ? array[index] : undefined;
+  });
+
+  // Get first item from array
+  Handlebars.registerHelper('first', (array: unknown[]) => {
+    return Array.isArray(array) && array.length > 0 ? array[0] : undefined;
+  });
 }
