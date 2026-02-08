@@ -51,6 +51,8 @@ export class ClaudeProxyClient {
     // OAuth tokens use Authorization: Bearer, API keys use x-api-key
     if (isOAuthToken) {
       headers['Authorization'] = `Bearer ${this.tokens.access_token}`;
+      // Required beta header for OAuth tokens (following OpenClaw's implementation)
+      headers['anthropic-beta'] = 'oauth-2025-04-20';
     } else {
       headers['x-api-key'] = this.tokens.access_token;
     }
