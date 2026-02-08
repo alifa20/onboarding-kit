@@ -36,10 +36,10 @@ async function openBrowser(url: string): Promise<void> {
 }
 
 /**
- * OAuth Authentication via claude.ai
+ * Setup Token Authentication (via Claude Code CLI)
  */
 export async function authCommand(): Promise<void> {
-  clack.intro(pc.bgCyan(pc.black(' Claude Pro/Max OAuth ')));
+  clack.intro(pc.bgCyan(pc.black(' Claude Pro/Max Setup Token ')));
 
   try {
     // Check if already authenticated
@@ -62,73 +62,64 @@ export async function authCommand(): Promise<void> {
     }
 
     clack.note(
-      `This will authenticate with your ${pc.bold('Claude Pro or Claude Max')} subscription.\n\n` +
-        `${pc.cyan('→')} A browser window will open to claude.ai\n` +
-        `${pc.cyan('→')} Log in with your Claude Pro/Max account\n` +
-        `${pc.cyan('→')} Grant access to OnboardKit\n` +
+      `OnboardKit uses ${pc.bold('Claude Code setup tokens')} to access your Claude Pro/Max subscription.\n\n` +
+        `${pc.cyan('→')} Install Claude Code CLI if not already installed\n` +
+        `${pc.cyan('→')} Run ${pc.bold('claude setup-token')} to generate a token\n` +
+        `${pc.cyan('→')} Paste the token below\n` +
         `${pc.cyan('→')} Your subscription will be used (no API charges!)`,
-      'OAuth Flow'
+      'Setup Token Required'
     );
 
+    // Prompt for setup token
+    const setupToken = await clack.text({
+      message: 'Enter your Claude Code setup token:',
+      placeholder: 'sk-ant-oat01-...',
+      validate: (value) => {
+        if (!value) return 'Setup token is required';
+        if (!value.startsWith('sk-ant-oat01-')) {
+          return 'Invalid token format. Should start with sk-ant-oat01-';
+        }
+        return undefined;
+      },
+    });
+
+    if (clack.isCancel(setupToken)) {
+      clack.cancel('Operation cancelled');
+      process.exit(0);
+    }
+
     const spinner = clack.spinner();
-    spinner.start('Starting OAuth flow...');
+    spinner.start('Validating setup token...');
 
     try {
-      // Import OAuth flow functions
-      const {
-        generateCodeVerifier,
-        generateCodeChallenge,
-        generateState,
-        buildAuthorizationUrl,
-        startCallbackServer,
-        getRedirectUri,
-        exchangeCodeForTokens,
-      } = await import('../lib/oauth/index.js');
-
-      const port = 3000;
-      const codeVerifier = generateCodeVerifier();
-      const codeChallenge = generateCodeChallenge(codeVerifier);
-      const state = generateState();
-      const redirectUri = getRedirectUri(port);
-
-      const authUrl = buildAuthorizationUrl(ANTHROPIC_PROVIDER, {
-        codeVerifier,
-        codeChallenge,
-        state,
-        redirectUri,
+      // Test the token by making a simple API call
+      const { ClaudeProxyClient } = await import('../lib/claude-proxy/index.js');
+      const proxyClient = new ClaudeProxyClient({
+        tokens: {
+          access_token: setupToken as string,
+          token_type: 'Bearer',
+        },
       });
 
-      spinner.stop('Opening browser...');
-
-      clack.log.info(`If browser doesn't open, visit:\n${pc.cyan(authUrl)}`);
-
-      // Open browser
-      await openBrowser(authUrl);
-
-      // Wait for callback
-      spinner.start('Waiting for authentication...');
-      const callback = await startCallbackServer(port);
-
-      // Verify state
-      if (callback.state !== state) {
-        spinner.stop('State verification failed');
-        throw new OAuthError('State mismatch - possible CSRF attack');
-      }
-
-      spinner.message('Exchanging authorization code...');
-
-      // Exchange code for tokens
-      const tokens = await exchangeCodeForTokens(
-        ANTHROPIC_PROVIDER,
-        callback.code,
-        codeVerifier,
-        redirectUri
-      );
+      // Test with a minimal request
+      await proxyClient.sendMessage({
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 10,
+        messages: [
+          {
+            role: 'user',
+            content: 'Hi',
+          },
+        ],
+      });
 
       spinner.message('Saving credentials...');
 
-      // Save tokens
-      await saveTokens(ANTHROPIC_PROVIDER, tokens);
+      // Save the token as OAuth tokens
+      await saveTokens(ANTHROPIC_PROVIDER, {
+        access_token: setupToken as string,
+        token_type: 'Bearer',
+      });
 
       spinner.stop('Authentication complete');
 
@@ -136,7 +127,7 @@ export async function authCommand(): Promise<void> {
       clack.note(
         `${pc.green('✓')} Your Claude subscription will be used\n` +
           `${pc.green('✓')} No API charges - uses your $20-200/month subscription\n` +
-          `${pc.green('✓')} Tokens saved to OS keychain`,
+          `${pc.green('✓')} Token saved to OS keychain`,
         'Success'
       );
 
@@ -144,11 +135,13 @@ export async function authCommand(): Promise<void> {
     } catch (err) {
       spinner.stop('Authentication failed');
 
-      if (err instanceof OAuthError) {
-        clack.log.error(err.message);
-      } else {
-        clack.log.error(`Error: ${err}`);
-      }
+      clack.log.error(
+        `Failed to validate setup token. Please check:\n` +
+          `  ${pc.cyan('→')} Token is copied correctly\n` +
+          `  ${pc.cyan('→')} You have Claude Pro or Claude Max subscription\n` +
+          `  ${pc.cyan('→')} Token hasn't expired\n\n` +
+          `Error: ${err instanceof Error ? err.message : err}`
+      );
 
       clack.outro(pc.red('Authentication failed'));
       process.exit(1);
@@ -179,19 +172,15 @@ export async function authStatusCommand(): Promise<void> {
       try {
         const tokens = await loadTokens(ANTHROPIC_PROVIDER);
 
-        clack.log.info(`${pc.green('✓')} ${pc.bold('Claude Pro/Max OAuth')}`);
+        clack.log.info(`${pc.green('✓')} ${pc.bold('Claude Pro/Max Setup Token')}`);
         clack.log.info(`  Status: ${pc.green('Authenticated')}`);
         clack.log.info(`  Mode: Subscription (no API charges)`);
         clack.log.info(`  Token: ${pc.dim(tokens.access_token.substring(0, 20))}...`);
-
-        if (tokens.expires_in) {
-          const expiresIn = Math.floor(tokens.expires_in / 3600);
-          clack.log.info(`  Expires: ${expiresIn} hours`);
-        }
+        clack.log.info(`  Type: Claude Code setup token`);
 
         clack.outro(pc.green('Status check complete'));
       } catch (err) {
-        clack.log.error('Failed to load OAuth tokens');
+        clack.log.error('Failed to load setup token');
         clack.outro(pc.red('Status check failed'));
         process.exit(1);
       }
