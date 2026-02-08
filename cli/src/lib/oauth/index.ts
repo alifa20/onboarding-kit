@@ -52,6 +52,7 @@ export {
 export {
   getValidAccessToken,
   saveTokens,
+  loadTokens,
   revokeTokens,
   getCredentialStatus,
   isTokenExpired,

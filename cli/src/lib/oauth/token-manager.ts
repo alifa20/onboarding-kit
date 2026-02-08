@@ -108,6 +108,29 @@ export async function saveTokens(
 }
 
 /**
+ * Load tokens for a provider
+ * Returns null if not authenticated
+ */
+export async function loadTokens(
+  provider: OAuthProvider
+): Promise<OAuthTokens | null> {
+  const credential = await getStoredCredential(provider.name);
+
+  if (!credential) {
+    return null;
+  }
+
+  return {
+    access_token: credential.accessToken,
+    refresh_token: credential.refreshToken,
+    expires_in: credential.expiresAt
+      ? Math.floor((credential.expiresAt - Date.now()) / 1000)
+      : undefined,
+    token_type: 'Bearer',
+  };
+}
+
+/**
  * Revoke stored tokens
  */
 export async function revokeTokens(providerName: string): Promise<void> {

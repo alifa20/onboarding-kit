@@ -13,7 +13,7 @@ import {
   AITimeoutError,
   wrapFetchError,
 } from '../errors.js';
-import { ClaudeProxyClient, type ClaudeOAuthTokens } from '../claude-proxy/index.js';
+import { ClaudeProxyClient, type ClaudeOAuthTokens } from '../../claude-proxy/index.js';
 
 /**
  * Default model to use for Anthropic requests
