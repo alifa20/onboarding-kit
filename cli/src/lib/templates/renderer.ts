@@ -96,54 +96,131 @@ export async function renderTemplates(spec: OnboardingSpec): Promise<RenderResul
     });
   }
 
-  // Navigation files
-  const navTemplates = ['stack.hbs', 'types.hbs'];
-  for (const template of navTemplates) {
-    const compiled = await loadTemplate(`navigation/${template}`);
-    const rendered = compiled(context);
-    const formatted = await formatCode(rendered);
-    const filename = template.replace('.hbs', template.includes('stack') ? '.tsx' : '.ts');
+  // Navigation files (only for React Navigation)
+  if (spec.config.navigation === 'react-navigation') {
+    const navTemplates = ['stack.hbs', 'types.hbs'];
+    for (const template of navTemplates) {
+      const compiled = await loadTemplate(`navigation/${template}`);
+      const rendered = compiled(context);
+      const formatted = await formatCode(rendered);
+      const filename = template.replace('.hbs', template.includes('stack') ? '.tsx' : '.ts');
+      files.push({
+        path: `navigation/${filename}`,
+        content: formatted,
+      });
+    }
+  }
+
+  // Expo Router layout file
+  if (spec.config.navigation === 'expo-router') {
+    const layoutTemplate = await loadTemplate('expo-router/_layout.hbs');
+    const layoutRendered = layoutTemplate(context);
+    const layoutFormatted = await formatCode(layoutRendered);
     files.push({
-      path: `navigation/${filename}`,
-      content: formatted,
+      path: 'app/_layout.tsx',
+      content: layoutFormatted,
     });
   }
 
+  // Screens - Choose template folder based on navigation type
+  const screenFolder = spec.config.navigation === 'expo-router' ? 'expo-router' : 'screens';
+  const screenPath = spec.config.navigation === 'expo-router' ? 'app' : 'screens';
+
   // Screen: Welcome
-  const welcomeTemplate = await loadTemplate('screens/welcome.hbs');
-  const welcomeRendered = welcomeTemplate(context);
-  const welcomeFormatted = await formatCode(welcomeRendered);
-  files.push({
-    path: 'screens/WelcomeScreen.tsx',
-    content: welcomeFormatted,
-  });
+  if (spec.config.navigation === 'expo-router') {
+    const welcomeTemplate = await loadTemplate('expo-router/index.hbs');
+    const welcomeRendered = welcomeTemplate(context);
+    const welcomeFormatted = await formatCode(welcomeRendered);
+    files.push({
+      path: 'app/index.tsx',
+      content: welcomeFormatted,
+    });
+  } else {
+    const welcomeTemplate = await loadTemplate('screens/welcome.hbs');
+    const welcomeRendered = welcomeTemplate(context);
+    const welcomeFormatted = await formatCode(welcomeRendered);
+    files.push({
+      path: 'screens/WelcomeScreen.tsx',
+      content: welcomeFormatted,
+    });
+  }
 
   // Screen: Login
-  const loginTemplate = await loadTemplate('screens/login.hbs');
-  const loginRendered = loginTemplate(context);
-  const loginFormatted = await formatCode(loginRendered);
-  files.push({
-    path: 'screens/LoginScreen.tsx',
-    content: loginFormatted,
-  });
+  if (spec.config.navigation === 'expo-router') {
+    const loginTemplate = await loadTemplate('expo-router/login.hbs');
+    const loginRendered = loginTemplate(context);
+    const loginFormatted = await formatCode(loginRendered);
+    files.push({
+      path: 'app/login.tsx',
+      content: loginFormatted,
+    });
+  } else {
+    const loginTemplate = await loadTemplate('screens/login.hbs');
+    const loginRendered = loginTemplate(context);
+    const loginFormatted = await formatCode(loginRendered);
+    files.push({
+      path: 'screens/LoginScreen.tsx',
+      content: loginFormatted,
+    });
+  }
 
   // Screen: Name Capture (Signup)
-  const signupTemplate = await loadTemplate('screens/signup.hbs');
-  const signupRendered = signupTemplate(context);
-  const signupFormatted = await formatCode(signupRendered);
-  files.push({
-    path: 'screens/NameCaptureScreen.tsx',
-    content: signupFormatted,
-  });
+  if (spec.config.navigation === 'expo-router') {
+    const signupTemplate = await loadTemplate('expo-router/name-capture.hbs');
+    const signupRendered = signupTemplate(context);
+    const signupFormatted = await formatCode(signupRendered);
+    files.push({
+      path: 'app/name-capture.tsx',
+      content: signupFormatted,
+    });
+  } else {
+    const signupTemplate = await loadTemplate('screens/signup.hbs');
+    const signupRendered = signupTemplate(context);
+    const signupFormatted = await formatCode(signupRendered);
+    files.push({
+      path: 'screens/NameCaptureScreen.tsx',
+      content: signupFormatted,
+    });
+  }
+
+  // Screen: Home
+  if (spec.config.navigation === 'expo-router') {
+    const homeTemplate = await loadTemplate('expo-router/home.hbs');
+    const homeRendered = homeTemplate(context);
+    const homeFormatted = await formatCode(homeRendered);
+    files.push({
+      path: 'app/home.tsx',
+      content: homeFormatted,
+    });
+  }
 
   // Onboarding step screens (generate for each step)
   for (let i = 0; i < spec.onboardingSteps.length; i++) {
     const step = spec.onboardingSteps[i];
-    const stepContext = { ...context, step, stepNumber: i + 1 };
+    const isFirstStep = i === 0;
+    const isLastStep = i === spec.onboardingSteps.length - 1;
+    const stepContext = {
+      ...context,
+      step,
+      stepNumber: i + 1,
+      isFirstStep,
+      isLastStep,
+      prevStepIndex: i - 1,
+      nextStepIndex: i + 1,
+    };
 
-    // For now, create a simple placeholder screen for each step
-    // In a full implementation, you'd have a separate template for onboarding steps
-    const stepContent = `/**
+    if (spec.config.navigation === 'expo-router') {
+      // Expo Router - use template
+      const stepTemplate = await loadTemplate('expo-router/onboarding-step.hbs');
+      const stepRendered = stepTemplate(stepContext);
+      const stepFormatted = await formatCode(stepRendered);
+      files.push({
+        path: `app/onboarding-step-${i}.tsx`,
+        content: stepFormatted,
+      });
+    } else {
+      // React Navigation - inline generation
+      const stepContent = `/**
  * Onboarding Step ${i + 1} Screen for ${spec.projectName}
  * Generated by OnboardKit
  */
@@ -258,11 +335,12 @@ const styles = StyleSheet.create({
 });
 `;
 
-    const stepFormatted = await formatCode(stepContent);
-    files.push({
-      path: `screens/OnboardingStep${i + 1}Screen.tsx`,
-      content: stepFormatted,
-    });
+      const stepFormatted = await formatCode(stepContent);
+      files.push({
+        path: `screens/OnboardingStep${i + 1}Screen.tsx`,
+        content: stepFormatted,
+      });
+    }
   }
 
   // Home screen placeholder

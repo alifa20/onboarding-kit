@@ -10,7 +10,7 @@ const hexColorRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
  */
 export const ConfigSchema = z.object({
   platform: z.literal('expo'),
-  navigation: z.literal('react-navigation'),
+  navigation: z.enum(['react-navigation', 'expo-router']),
   styling: z.literal('stylesheet'),
 });
 
