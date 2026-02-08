@@ -1,7 +1,9 @@
 import { AIProvider } from '../types.js';
 import { AIError } from '../errors.js';
-import { createAnthropicProvider } from './anthropic.js';
+import { AnthropicProvider } from './anthropic.js';
 import { loadApiKey } from '../../auth/index.js';
+import { loadTokens } from '../../oauth/index.js';
+import { ANTHROPIC_PROVIDER } from '../../oauth/providers.js';
 
 /**
  * Supported AI provider names
@@ -19,15 +21,29 @@ export async function createProvider(
 
   switch (normalizedName) {
     case 'anthropic': {
-      // Get API key if not provided
+      // Try OAuth tokens first, fall back to API key
+      const tokens = await loadTokens(ANTHROPIC_PROVIDER).catch(() => null);
+
+      if (tokens) {
+        // Use OAuth mode with Claude Code proxy
+        return new AnthropicProvider({
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token,
+          expires_in: tokens.expires_in,
+          token_type: 'Bearer',
+        });
+      }
+
+      // Fall back to API key mode
       const apiKey = accessToken || (await loadApiKey());
       if (!apiKey) {
         throw new AIError(
-          'No Anthropic API key found. Run "onboardkit auth" to configure your API key.',
-          'NO_API_KEY'
+          'No authentication found. Run "onboardkit auth" to authenticate with OAuth or API key.',
+          'NO_AUTH'
         );
       }
-      return createAnthropicProvider(apiKey);
+
+      return new AnthropicProvider(apiKey);
     }
 
     default:

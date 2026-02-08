@@ -13,6 +13,7 @@ import {
   AITimeoutError,
   wrapFetchError,
 } from '../errors.js';
+import { ClaudeProxyClient, type ClaudeOAuthTokens } from '../claude-proxy/index.js';
 
 /**
  * Default model to use for Anthropic requests
@@ -31,22 +32,36 @@ const DEFAULT_OPTIONS: Required<AIRequestOptions> = {
 
 /**
  * Anthropic Claude provider implementation
+ * Supports both direct API (with API keys) and proxy mode (with OAuth tokens)
  */
 export class AnthropicProvider implements AIProvider {
   public readonly name = 'anthropic';
   public readonly displayName = 'Anthropic Claude';
 
-  private client: Anthropic;
+  private client?: Anthropic;
+  private proxyClient?: ClaudeProxyClient;
   private model: string;
+  private mode: 'api' | 'proxy';
 
-  constructor(apiKey: string, model: string = DEFAULT_MODEL) {
-    // Note: OAuth tokens (sk-ant-oat01-) do NOT work with the Anthropic API
-    // The API only accepts API keys (sk-ant-api03-) via x-api-key header
-    this.client = new Anthropic({
-      apiKey,
-      timeout: DEFAULT_OPTIONS.timeout,
-    });
+  constructor(apiKey: string, model: string = DEFAULT_MODEL);
+  constructor(tokens: ClaudeOAuthTokens, model?: string);
+  constructor(authOrTokens: string | ClaudeOAuthTokens, model: string = DEFAULT_MODEL) {
     this.model = model;
+
+    if (typeof authOrTokens === 'string') {
+      // API key mode - use standard Anthropic SDK
+      this.mode = 'api';
+      this.client = new Anthropic({
+        apiKey: authOrTokens,
+        timeout: DEFAULT_OPTIONS.timeout,
+      });
+    } else {
+      // OAuth token mode - use Claude Code proxy
+      this.mode = 'proxy';
+      this.proxyClient = new ClaudeProxyClient({
+        tokens: authOrTokens,
+      });
+    }
   }
 
   /**
@@ -54,8 +69,7 @@ export class AnthropicProvider implements AIProvider {
    */
   async isAvailable(): Promise<boolean> {
     try {
-      // Simple validation - just check if we can create a client
-      return !!this.client;
+      return !!(this.client || this.proxyClient);
     } catch {
       return false;
     }
@@ -70,6 +84,26 @@ export class AnthropicProvider implements AIProvider {
   ): Promise<AIResponse> {
     const mergedOptions = { ...DEFAULT_OPTIONS, ...options };
 
+    if (this.mode === 'proxy' && this.proxyClient) {
+      return this.sendViaProxy(messages, mergedOptions);
+    } else if (this.mode === 'api' && this.client) {
+      return this.sendViaAPI(messages, mergedOptions);
+    } else {
+      throw new AIError('Provider not properly initialized', 'INITIALIZATION_ERROR');
+    }
+  }
+
+  /**
+   * Send message via standard Anthropic API
+   */
+  private async sendViaAPI(
+    messages: AIMessage[],
+    options: Required<AIRequestOptions>
+  ): Promise<AIResponse> {
+    if (!this.client) {
+      throw new AIError('API client not initialized', 'INITIALIZATION_ERROR');
+    }
+
     try {
       // Convert messages to Anthropic format
       const { system, messages: anthropicMessages } = convertMessages(messages);
@@ -77,12 +111,12 @@ export class AnthropicProvider implements AIProvider {
       // Create message request
       const response = await this.client.messages.create({
         model: this.model,
-        max_tokens: mergedOptions.maxTokens,
-        temperature: mergedOptions.temperature,
+        max_tokens: options.maxTokens,
+        temperature: options.temperature,
         system,
         messages: anthropicMessages,
-        ...(mergedOptions.stopSequences.length > 0 && {
-          stop_sequences: mergedOptions.stopSequences,
+        ...(options.stopSequences.length > 0 && {
+          stop_sequences: options.stopSequences,
         }),
       });
 
@@ -100,6 +134,59 @@ export class AnthropicProvider implements AIProvider {
       };
     } catch (error) {
       throw handleAnthropicError(error);
+    }
+  }
+
+  /**
+   * Send message via Claude Code proxy
+   */
+  private async sendViaProxy(
+    messages: AIMessage[],
+    options: Required<AIRequestOptions>
+  ): Promise<AIResponse> {
+    if (!this.proxyClient) {
+      throw new AIError('Proxy client not initialized', 'INITIALIZATION_ERROR');
+    }
+
+    try {
+      // Convert messages to Claude Code format
+      const { system, messages: proxyMessages } = convertMessages(messages);
+
+      // Send via proxy
+      const response = await this.proxyClient.sendMessage({
+        model: this.model,
+        max_tokens: options.maxTokens,
+        temperature: options.temperature,
+        system,
+        messages: proxyMessages.map((m) => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.content as string,
+        })),
+        ...(options.stopSequences.length > 0 && {
+          stop_sequences: options.stopSequences,
+        }),
+      });
+
+      // Extract text from response
+      const content = response.content
+        .filter((c) => c.type === 'text')
+        .map((c) => c.text)
+        .join('\n');
+
+      return {
+        content,
+        model: response.model,
+        stopReason: response.stop_reason || 'end_turn',
+        usage: {
+          inputTokens: response.usage.input_tokens,
+          outputTokens: response.usage.output_tokens,
+        },
+      };
+    } catch (error) {
+      throw new AIError(
+        `Proxy error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'PROXY_ERROR'
+      );
     }
   }
 }

@@ -39,35 +39,53 @@ import type { OnboardingSpec } from '../spec/schema.js';
 
 /**
  * Phase 1: Auth Check
- * Verify API key exists and is valid
+ * Verify OAuth or API key authentication
  */
 export async function executeAuthCheck(
   checkpoint: Checkpoint,
   options: WorkflowOptions
 ): Promise<PhaseResult<void>> {
   try {
-    // Import API key auth functions
-    const { hasApiKey, loadApiKey } = await import('../auth/index.js');
+    // Check for OAuth tokens first
+    const storedProviders = await listStoredProviders();
 
-    // Check if API key exists
-    if (!(await hasApiKey())) {
+    if (storedProviders.length === 0) {
       return {
         success: false,
-        error: 'No API key found. Run "onboardkit auth" to configure your Anthropic API key.',
+        error: 'Not authenticated. Run "onboardkit auth" to authenticate with Claude Pro/Max.',
       };
     }
 
-    // Load API key
-    const apiKey = await loadApiKey();
-    if (!apiKey) {
+    // Get the first provider (for now we only support one)
+    const providerName = storedProviders[0];
+    const provider = getProvider(providerName);
+
+    if (!provider) {
       return {
         success: false,
-        error: 'Could not load API key. Run "onboardkit auth" to reconfigure.',
+        error: `Provider not found: ${providerName}`,
       };
     }
 
-    // Store API key in checkpoint for use by AI operations
-    checkpoint.data.apiKey = apiKey;
+    // Check credential status
+    const status = await getCredentialStatus(provider);
+
+    if (status.isExpired && !status.canRefresh) {
+      return {
+        success: false,
+        error: 'Authentication expired. Please re-authenticate with "onboardkit auth".',
+      };
+    }
+
+    // Try to get valid tokens (will refresh if needed)
+    try {
+      await getValidAccessToken(provider);
+    } catch (error) {
+      return {
+        success: false,
+        error: `Failed to get valid access token: ${error}`,
+      };
+    }
 
     return { success: true };
   } catch (error) {

@@ -1,26 +1,27 @@
 import { OAuthProvider } from './types.js';
 
 /**
- * Anthropic Claude provider configuration
+ * Anthropic Claude OAuth provider configuration
  *
- * IMPORTANT: Anthropic's OAuth is designed for their own applications.
- * For third-party CLI tools, use API key authentication instead.
+ * Uses claude.ai OAuth with PKCE for Claude Pro/Max subscription access.
+ * This authenticates with claude.ai (not console.anthropic.com) and
+ * provides tokens that work with the Claude Code API endpoint.
  *
- * To use this tool:
- * 1. Get your API key from https://console.anthropic.com/settings/keys
- * 2. Set environment variable: export ANTHROPIC_API_KEY=your-key-here
- * 3. Or use --api-key flag when running commands
+ * Flow:
+ * 1. User authenticates via browser to claude.ai
+ * 2. OAuth callback returns code#state
+ * 3. Exchange code for access token
+ * 4. Use token with api.githubcopilot.com endpoint
  *
- * OAuth configuration below is kept for reference but may not work
- * for third-party applications without proper client registration.
+ * No client_id required - uses public OAuth flow with PKCE
  */
 export const ANTHROPIC_PROVIDER: OAuthProvider = {
   name: 'anthropic',
   displayName: 'Anthropic Claude',
-  clientId: process.env.ANTHROPIC_CLIENT_ID || '',
+  clientId: '', // Public OAuth - no client_id needed
   authorizationEndpoint: 'https://claude.ai/oauth/authorize',
   tokenEndpoint: 'https://claude.ai/oauth/token',
-  scopes: ['user:inference', 'user:profile'],
+  scopes: [], // No scopes needed for public flow
   supportsRefresh: true,
 };
 

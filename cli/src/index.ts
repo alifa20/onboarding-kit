@@ -31,8 +31,7 @@ const authCmd = program
 
 authCmd
   .command('login')
-  .description('Authenticate with an AI provider')
-  .option('-p, --provider <name>', 'AI provider (anthropic, claude)')
+  .description('Authenticate with Claude Pro/Max via OAuth')
   .action(withErrorHandling(authCommand, { commandName: 'auth' }));
 
 authCmd
@@ -46,7 +45,7 @@ authCmd
   .action(withErrorHandling(authRevokeCommand, { commandName: 'auth-revoke' }));
 
 // Default auth action (login)
-authCmd.action(withErrorHandling(() => authCommand({}), { commandName: 'auth' }));
+authCmd.action(withErrorHandling(authCommand, { commandName: 'auth' }));
 
 // Validate command
 program

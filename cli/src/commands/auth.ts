@@ -1,47 +1,52 @@
 import * as clack from '@clack/prompts';
 import pc from 'picocolors';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import {
-  saveApiKey,
-  loadApiKey,
-  hasApiKey,
-  isValidApiKey,
-  testApiKey,
-  removeApiKey,
-} from '../lib/auth/index.js';
+  getProvider,
+  executeOAuthFlow,
+  saveTokens,
+  loadTokens,
+  revokeTokens,
+  listStoredProviders,
+  OAuthError,
+} from '../lib/oauth/index.js';
+import { ANTHROPIC_PROVIDER } from '../lib/oauth/providers.js';
 
-// Removed unused functions
+const execAsync = promisify(exec);
 
 /**
- * API Key Authentication
+ * Open URL in default browser
  */
-export async function authCommand(options: { apiKey?: string; oauth?: boolean }): Promise<void> {
-  clack.intro(pc.bgCyan(pc.black(' Anthropic Authentication ')));
+async function openBrowser(url: string): Promise<void> {
+  const platform = process.platform;
 
   try {
-    // If OAuth flag is set, show the reality about OAuth
-    if (options.oauth) {
-      clack.note(
-        `${pc.red('⚠ OAuth tokens do NOT work with Anthropic API')}\n\n` +
-          `OAuth tokens from Claude Code (sk-ant-oat01-) are restricted\n` +
-          `to Claude Code only. The API returns:\n` +
-          `${pc.dim('"OAuth authentication is currently not supported."')}\n\n` +
-          `${pc.bold('You must use an API key instead:')}\n` +
-          `1. Visit ${pc.cyan('https://console.anthropic.com/settings/keys')}\n` +
-          `2. Create a new API key (sk-ant-api03-...)\n` +
-          `3. Run ${pc.cyan('npx onboardkit auth')} with that key\n\n` +
-          `${pc.dim('Source: https://jpcaparas.medium.com/claude-code-cripples-third-party-coding-agents-from-using-oauth-6548e9b49df3')}`,
-        'OAuth Reality Check'
-      );
-      clack.outro(pc.red('OAuth tokens are not supported. Use API keys.'));
-      process.exit(1);
+    if (platform === 'darwin') {
+      await execAsync(`open "${url}"`);
+    } else if (platform === 'win32') {
+      await execAsync(`start "" "${url}"`);
+    } else {
+      // Linux and others
+      await execAsync(`xdg-open "${url}"`);
     }
+  } catch (err) {
+    // Ignore browser open errors
+  }
+}
 
-    let apiKey = options.apiKey;
+/**
+ * OAuth Authentication via claude.ai
+ */
+export async function authCommand(): Promise<void> {
+  clack.intro(pc.bgCyan(pc.black(' Claude Pro/Max OAuth ')));
 
-    // Check if already has API key
-    if (!apiKey && (await hasApiKey())) {
+  try {
+    // Check if already authenticated
+    const storedProviders = await listStoredProviders();
+    if (storedProviders.includes('anthropic')) {
       const useExisting = await clack.confirm({
-        message: 'API key already configured. Do you want to replace it?',
+        message: 'Already authenticated with Claude. Re-authenticate?',
         initialValue: false,
       });
 
@@ -51,70 +56,105 @@ export async function authCommand(options: { apiKey?: string; oauth?: boolean })
       }
 
       if (!useExisting) {
-        clack.outro(pc.green('Using existing API key'));
+        clack.outro(pc.green('Using existing authentication'));
         return;
       }
     }
 
-    // Prompt for API key if not provided
-    if (!apiKey) {
-      clack.note(
-        `${pc.bold('Get your API key from:')}\n` +
-          `${pc.cyan('https://console.anthropic.com/settings/keys')}\n\n` +
-          `${pc.yellow('⚠ Note:')} OAuth tokens (sk-ant-oat01-) from Claude Code\n` +
-          `do NOT work with the Anthropic API. You need an API key\n` +
-          `that starts with ${pc.cyan('sk-ant-api03-')}`,
-        'API Key Required'
-      );
-
-      const input = await clack.text({
-        message: 'Enter your Anthropic API key:',
-        placeholder: 'sk-ant-api03-...',
-        validate: (value) => {
-          if (!value) return 'API key is required';
-          if (!value.startsWith('sk-ant-api')) {
-            return 'Invalid API key. Should start with "sk-ant-api03-"';
-          }
-        },
-      });
-
-      if (clack.isCancel(input)) {
-        clack.cancel('Operation cancelled');
-        process.exit(0);
-      }
-
-      apiKey = input as string;
-    }
-
-    // Test API key/token
-    const spinner = clack.spinner();
-    spinner.start('Testing credentials...');
-
-    const isValid = await testApiKey(apiKey);
-
-    if (!isValid) {
-      spinner.stop('Credential test failed');
-      clack.outro(pc.red('Invalid API key/token. Please check and try again.'));
-      process.exit(1);
-    }
-
-    spinner.message('Saving credentials...');
-
-    // Save API key
-    await saveApiKey(apiKey);
-
-    spinner.stop('Credentials saved');
-
-    clack.log.success('Successfully configured Anthropic authentication!');
     clack.note(
-      `Your credentials are saved to:\n${pc.dim('~/.onboardkit/api-key.txt')}\n\n` +
-        `You can also use the ANTHROPIC_API_KEY environment variable.`,
-      'Configuration'
+      `This will authenticate with your ${pc.bold('Claude Pro or Claude Max')} subscription.\n\n` +
+        `${pc.cyan('→')} A browser window will open to claude.ai\n` +
+        `${pc.cyan('→')} Log in with your Claude Pro/Max account\n` +
+        `${pc.cyan('→')} Grant access to OnboardKit\n` +
+        `${pc.cyan('→')} Your subscription will be used (no API charges!)`,
+      'OAuth Flow'
     );
 
-    clack.outro(pc.green('Authentication complete ✓'));
+    const spinner = clack.spinner();
+    spinner.start('Starting OAuth flow...');
+
+    try {
+      // Import OAuth flow functions
+      const {
+        generateCodeVerifier,
+        generateCodeChallenge,
+        generateState,
+        buildAuthorizationUrl,
+        startCallbackServer,
+        getRedirectUri,
+        exchangeCodeForTokens,
+      } = await import('../lib/oauth/index.js');
+
+      const port = 3000;
+      const codeVerifier = generateCodeVerifier();
+      const codeChallenge = generateCodeChallenge(codeVerifier);
+      const state = generateState();
+      const redirectUri = getRedirectUri(port);
+
+      const authUrl = buildAuthorizationUrl(ANTHROPIC_PROVIDER, {
+        codeVerifier,
+        codeChallenge,
+        state,
+        redirectUri,
+      });
+
+      spinner.stop('Opening browser...');
+
+      clack.log.info(`If browser doesn't open, visit:\n${pc.cyan(authUrl)}`);
+
+      // Open browser
+      await openBrowser(authUrl);
+
+      // Wait for callback
+      spinner.start('Waiting for authentication...');
+      const callback = await startCallbackServer(port);
+
+      // Verify state
+      if (callback.state !== state) {
+        spinner.stop('State verification failed');
+        throw new OAuthError('State mismatch - possible CSRF attack');
+      }
+
+      spinner.message('Exchanging authorization code...');
+
+      // Exchange code for tokens
+      const tokens = await exchangeCodeForTokens(
+        ANTHROPIC_PROVIDER,
+        callback.code,
+        codeVerifier,
+        redirectUri
+      );
+
+      spinner.message('Saving credentials...');
+
+      // Save tokens
+      await saveTokens(ANTHROPIC_PROVIDER, tokens);
+
+      spinner.stop('Authentication complete');
+
+      clack.log.success('Successfully authenticated with Claude Pro/Max!');
+      clack.note(
+        `${pc.green('✓')} Your Claude subscription will be used\n` +
+          `${pc.green('✓')} No API charges - uses your $20-200/month subscription\n` +
+          `${pc.green('✓')} Tokens saved to OS keychain`,
+        'Success'
+      );
+
+      clack.outro(pc.green('Ready to use OnboardKit ✓'));
+    } catch (err) {
+      spinner.stop('Authentication failed');
+
+      if (err instanceof OAuthError) {
+        clack.log.error(err.message);
+      } else {
+        clack.log.error(`Error: ${err}`);
+      }
+
+      clack.outro(pc.red('Authentication failed'));
+      process.exit(1);
+    }
   } catch (err) {
-    clack.log.error(`Error: ${err}`);
+    clack.log.error(`Fatal error: ${err}`);
     clack.outro(pc.red('Authentication failed'));
     process.exit(1);
   }
@@ -127,29 +167,37 @@ export async function authStatusCommand(): Promise<void> {
   clack.intro(pc.bgCyan(pc.black(' Authentication Status ')));
 
   try {
-    const hasKey = await hasApiKey();
+    const storedProviders = await listStoredProviders();
 
-    if (!hasKey) {
-      clack.log.warn('No API key configured');
-      clack.outro(pc.yellow('Run "onboardkit auth" to configure your API key'));
+    if (storedProviders.length === 0) {
+      clack.log.warn('Not authenticated');
+      clack.outro(pc.yellow('Run "onboardkit auth" to authenticate'));
       return;
     }
 
-    const apiKey = await loadApiKey();
-    if (!apiKey) {
-      clack.log.warn('Could not load API key');
-      clack.outro(pc.yellow('Run "onboardkit auth" to configure your API key'));
-      return;
+    if (storedProviders.includes('anthropic')) {
+      try {
+        const tokens = await loadTokens(ANTHROPIC_PROVIDER);
+
+        clack.log.info(`${pc.green('✓')} ${pc.bold('Claude Pro/Max OAuth')}`);
+        clack.log.info(`  Status: ${pc.green('Authenticated')}`);
+        clack.log.info(`  Mode: Subscription (no API charges)`);
+        clack.log.info(`  Token: ${pc.dim(tokens.access_token.substring(0, 20))}...`);
+
+        if (tokens.expires_in) {
+          const expiresIn = Math.floor(tokens.expires_in / 3600);
+          clack.log.info(`  Expires: ${expiresIn} hours`);
+        }
+
+        clack.outro(pc.green('Status check complete'));
+      } catch (err) {
+        clack.log.error('Failed to load OAuth tokens');
+        clack.outro(pc.red('Status check failed'));
+        process.exit(1);
+      }
     }
-
-    clack.log.info(`${pc.green('✓')} ${pc.bold('Anthropic API Key')}`);
-    clack.log.info(`  Status: ${pc.green('Configured')}`);
-    clack.log.info(`  Key: ${pc.dim(apiKey.substring(0, 20))}...`);
-    clack.log.info(`  Source: ${process.env.ANTHROPIC_API_KEY ? 'Environment Variable' : 'Config File'}`);
-
-    clack.outro(pc.green('Status check complete'));
   } catch (err) {
-    clack.log.error(`Error checking status: ${err}`);
+    clack.log.error(`Error: ${err}`);
     clack.outro(pc.red('Status check failed'));
     process.exit(1);
   }
@@ -159,20 +207,20 @@ export async function authStatusCommand(): Promise<void> {
  * Revoke authentication
  */
 export async function authRevokeCommand(): Promise<void> {
-  clack.intro(pc.bgRed(pc.white(' Remove API Key ')));
+  clack.intro(pc.bgRed(pc.white(' Revoke Authentication ')));
 
   try {
-    const hasKey = await hasApiKey();
+    const storedProviders = await listStoredProviders();
 
-    if (!hasKey) {
-      clack.log.warn('No API key configured');
-      clack.outro(pc.yellow('Nothing to remove'));
+    if (storedProviders.length === 0) {
+      clack.log.warn('Not authenticated');
+      clack.outro(pc.yellow('Nothing to revoke'));
       return;
     }
 
     // Confirm action
     const confirm = await clack.confirm({
-      message: 'Are you sure you want to remove your stored API key?',
+      message: 'Are you sure you want to revoke authentication?',
     });
 
     if (clack.isCancel(confirm) || !confirm) {
@@ -181,18 +229,20 @@ export async function authRevokeCommand(): Promise<void> {
     }
 
     const spinner = clack.spinner();
-    spinner.start('Removing API key...');
+    spinner.start('Revoking credentials...');
 
-    // Remove API key
-    await removeApiKey();
+    // Revoke all providers
+    for (const providerName of storedProviders) {
+      await revokeTokens(providerName);
+    }
 
-    spinner.stop('API key removed');
+    spinner.stop('Credentials revoked');
 
-    clack.log.success('API key has been removed');
-    clack.outro(pc.green('Removal complete'));
+    clack.log.success('Authentication has been revoked');
+    clack.outro(pc.green('Revocation complete'));
   } catch (err) {
-    clack.log.error(`Error removing API key: ${err}`);
-    clack.outro(pc.red('Removal failed'));
+    clack.log.error(`Error: ${err}`);
+    clack.outro(pc.red('Revocation failed'));
     process.exit(1);
   }
 }
