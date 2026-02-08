@@ -14,10 +14,25 @@ import {
 /**
  * API Key Authentication
  */
-export async function authCommand(options: { apiKey?: string }): Promise<void> {
-  clack.intro(pc.bgCyan(pc.black(' Anthropic API Key Setup ')));
+export async function authCommand(options: { apiKey?: string; oauth?: boolean }): Promise<void> {
+  clack.intro(pc.bgCyan(pc.black(' Anthropic Authentication ')));
 
   try {
+    // If OAuth flag is set, show instructions for Claude CLI
+    if (options.oauth) {
+      clack.note(
+        `Anthropic OAuth is restricted to official Claude applications.\n\n` +
+          `For Claude Pro/Max subscriptions, use:\n` +
+          `${pc.cyan('claude setup-token')}\n\n` +
+          `This generates a token that can be used as:\n` +
+          `${pc.cyan('export ANTHROPIC_API_KEY=$(cat ~/.anthropic/token.txt)')}\n\n` +
+          `Then run ${pc.cyan('npx onboardkit onboard spec.md')}`,
+        'OAuth Information'
+      );
+      clack.outro(pc.yellow('Use API key authentication instead (run without --oauth flag)'));
+      return;
+    }
+
     let apiKey = options.apiKey;
 
     // Check if already has API key
@@ -41,17 +56,22 @@ export async function authCommand(options: { apiKey?: string }): Promise<void> {
     // Prompt for API key if not provided
     if (!apiKey) {
       clack.note(
-        `Get your API key from:\n${pc.cyan('https://console.anthropic.com/settings/keys')}`,
-        'API Key Required'
+        `${pc.bold('Option 1:')} API Key (Recommended)\n` +
+          `Get your API key from:\n${pc.cyan('https://console.anthropic.com/settings/keys')}\n\n` +
+          `${pc.bold('Option 2:')} Claude Pro/Max Subscription\n` +
+          `If you have Claude Pro/Max, run:\n${pc.cyan('claude setup-token')}\n` +
+          `Then use that token as your API key`,
+        'Authentication Options'
       );
 
       const input = await clack.text({
-        message: 'Enter your Anthropic API key:',
-        placeholder: 'sk-ant-...',
+        message: 'Enter your Anthropic API key or subscription token:',
+        placeholder: 'sk-ant-... or token from claude setup-token',
         validate: (value) => {
           if (!value) return 'API key is required';
-          if (!isValidApiKey(value)) {
-            return 'Invalid API key format. Should start with "sk-ant-"';
+          // Allow both API keys and subscription tokens
+          if (!value.startsWith('sk-ant-') && value.length < 20) {
+            return 'Invalid format. Should start with "sk-ant-" or be a subscription token';
           }
         },
       });
@@ -64,34 +84,28 @@ export async function authCommand(options: { apiKey?: string }): Promise<void> {
       apiKey = input as string;
     }
 
-    // Validate API key
-    if (!isValidApiKey(apiKey)) {
-      clack.outro(pc.red('Invalid API key format. Should start with "sk-ant-"'));
-      process.exit(1);
-    }
-
-    // Test API key
+    // Test API key/token
     const spinner = clack.spinner();
-    spinner.start('Testing API key...');
+    spinner.start('Testing credentials...');
 
     const isValid = await testApiKey(apiKey);
 
     if (!isValid) {
-      spinner.stop('API key test failed');
-      clack.outro(pc.red('Invalid API key. Please check your key and try again.'));
+      spinner.stop('Credential test failed');
+      clack.outro(pc.red('Invalid API key/token. Please check and try again.'));
       process.exit(1);
     }
 
-    spinner.message('Saving API key...');
+    spinner.message('Saving credentials...');
 
     // Save API key
     await saveApiKey(apiKey);
 
-    spinner.stop('API key saved');
+    spinner.stop('Credentials saved');
 
-    clack.log.success('Successfully configured Anthropic API key!');
+    clack.log.success('Successfully configured Anthropic authentication!');
     clack.note(
-      `Your API key is saved to:\n${pc.dim('~/.onboardkit/api-key.txt')}\n\n` +
+      `Your credentials are saved to:\n${pc.dim('~/.onboardkit/api-key.txt')}\n\n` +
         `You can also use the ANTHROPIC_API_KEY environment variable.`,
       'Configuration'
     );

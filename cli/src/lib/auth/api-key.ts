@@ -57,7 +57,8 @@ export async function hasApiKey(): Promise<boolean> {
  */
 export function isValidApiKey(apiKey: string): boolean {
   // Anthropic API keys start with "sk-ant-"
-  return apiKey.startsWith('sk-ant-') && apiKey.length > 20;
+  // Subscription tokens from `claude setup-token` are longer base64 strings
+  return (apiKey.startsWith('sk-ant-') || apiKey.length > 50) && apiKey.length > 20;
 }
 
 /**
