@@ -36,17 +36,17 @@ async function openBrowser(url: string): Promise<void> {
 }
 
 /**
- * Setup Token Authentication (via Claude Code CLI)
+ * API Key Authentication
  */
 export async function authCommand(): Promise<void> {
-  clack.intro(pc.bgCyan(pc.black(' Claude Pro/Max Setup Token ')));
+  clack.intro(pc.bgCyan(pc.black(' Anthropic API Key Authentication ')));
 
   try {
     // Check if already authenticated
     const storedProviders = await listStoredProviders();
     if (storedProviders.includes('anthropic')) {
       const useExisting = await clack.confirm({
-        message: 'Already authenticated with Claude. Re-authenticate?',
+        message: 'Already authenticated with Anthropic. Re-authenticate?',
         initialValue: false,
       });
 
@@ -62,41 +62,42 @@ export async function authCommand(): Promise<void> {
     }
 
     clack.note(
-      `OnboardKit uses ${pc.bold('Claude Code setup tokens')} to access your Claude Pro/Max subscription.\n\n` +
-        `${pc.cyan('→')} Install Claude Code CLI if not already installed\n` +
-        `${pc.cyan('→')} Run ${pc.bold('claude setup-token')} to generate a token\n` +
-        `${pc.cyan('→')} Paste the token below\n` +
-        `${pc.cyan('→')} Your subscription will be used (no API charges!)`,
-      'Setup Token Required'
+      `OnboardKit uses ${pc.bold('Anthropic API keys')} for AI features.\n\n` +
+        `${pc.cyan('→')} Visit ${pc.bold('console.anthropic.com')}\n` +
+        `${pc.cyan('→')} Go to Settings > API Keys\n` +
+        `${pc.cyan('→')} Create a new API key\n` +
+        `${pc.cyan('→')} Paste the key below\n\n` +
+        `${pc.dim('API keys start with: sk-ant-api03-...')}`,
+      'API Key Required'
     );
 
-    // Prompt for setup token
-    const setupToken = await clack.text({
-      message: 'Enter your Claude Code setup token:',
-      placeholder: 'sk-ant-oat01-...',
+    // Prompt for API key
+    const apiKey = await clack.text({
+      message: 'Enter your Anthropic API key:',
+      placeholder: 'sk-ant-api03-...',
       validate: (value) => {
-        if (!value) return 'Setup token is required';
-        if (!value.startsWith('sk-ant-oat01-')) {
-          return 'Invalid token format. Should start with sk-ant-oat01-';
+        if (!value) return 'API key is required';
+        if (!value.startsWith('sk-ant-api')) {
+          return 'Invalid API key format. Should start with sk-ant-api';
         }
         return undefined;
       },
     });
 
-    if (clack.isCancel(setupToken)) {
+    if (clack.isCancel(apiKey)) {
       clack.cancel('Operation cancelled');
       process.exit(0);
     }
 
     const spinner = clack.spinner();
-    spinner.start('Validating setup token...');
+    spinner.start('Validating API key...');
 
     try {
-      // Test the token by making a simple API call
+      // Test the API key by making a simple API call
       const { ClaudeProxyClient } = await import('../lib/claude-proxy/index.js');
       const proxyClient = new ClaudeProxyClient({
         tokens: {
-          access_token: setupToken as string,
+          access_token: apiKey as string,
           token_type: 'Bearer',
         },
       });
@@ -115,19 +116,20 @@ export async function authCommand(): Promise<void> {
 
       spinner.message('Saving credentials...');
 
-      // Save the token as OAuth tokens
+      // Save the API key
       await saveTokens(ANTHROPIC_PROVIDER, {
-        access_token: setupToken as string,
+        access_token: apiKey as string,
         token_type: 'Bearer',
       });
 
       spinner.stop('Authentication complete');
 
-      clack.log.success('Successfully authenticated with Claude Pro/Max!');
+      clack.log.success('Successfully authenticated with Anthropic!');
       clack.note(
-        `${pc.green('✓')} Your Claude subscription will be used\n` +
-          `${pc.green('✓')} No API charges - uses your $20-200/month subscription\n` +
-          `${pc.green('✓')} Token saved to OS keychain`,
+        `${pc.green('✓')} API key validated and saved\n` +
+          `${pc.green('✓')} Stored securely in OS keychain\n` +
+          `${pc.green('✓')} Ready to use AI features\n\n` +
+          `${pc.dim('Note: API usage will be charged to your Anthropic account')}`,
         'Success'
       );
 
@@ -135,12 +137,16 @@ export async function authCommand(): Promise<void> {
     } catch (err) {
       spinner.stop('Authentication failed');
 
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      
       clack.log.error(
-        `Failed to validate setup token. Please check:\n` +
-          `  ${pc.cyan('→')} Token is copied correctly\n` +
-          `  ${pc.cyan('→')} You have Claude Pro or Claude Max subscription\n` +
-          `  ${pc.cyan('→')} Token hasn't expired\n\n` +
-          `Error: ${err instanceof Error ? err.message : err}`
+        `Failed to validate API key. Please check:\n` +
+          `  ${pc.cyan('→')} API key is copied correctly (no extra spaces)\n` +
+          `  ${pc.cyan('→')} API key starts with sk-ant-api\n` +
+          `  ${pc.cyan('→')} API key is active (not revoked)\n` +
+          `  ${pc.cyan('→')} Your Anthropic account has API access\n\n` +
+          `${pc.dim('Get your API key at: console.anthropic.com')}\n\n` +
+          `Error: ${errorMessage}`
       );
 
       clack.outro(pc.red('Authentication failed'));
@@ -172,15 +178,14 @@ export async function authStatusCommand(): Promise<void> {
       try {
         const tokens = await loadTokens(ANTHROPIC_PROVIDER);
 
-        clack.log.info(`${pc.green('✓')} ${pc.bold('Claude Pro/Max Setup Token')}`);
+        clack.log.info(`${pc.green('✓')} ${pc.bold('Anthropic API Key')}`);
         clack.log.info(`  Status: ${pc.green('Authenticated')}`);
-        clack.log.info(`  Mode: Subscription (no API charges)`);
-        clack.log.info(`  Token: ${pc.dim(tokens.access_token.substring(0, 20))}...`);
-        clack.log.info(`  Type: Claude Code setup token`);
+        clack.log.info(`  Key: ${pc.dim(tokens.access_token.substring(0, 20))}...`);
+        clack.log.info(`  Storage: OS keychain`);
 
         clack.outro(pc.green('Status check complete'));
       } catch (err) {
-        clack.log.error('Failed to load setup token');
+        clack.log.error('Failed to load API key');
         clack.outro(pc.red('Status check failed'));
         process.exit(1);
       }

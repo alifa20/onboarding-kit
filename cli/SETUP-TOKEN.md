@@ -1,6 +1,27 @@
-# Setup Token Authentication
+# ⚠️ DEPRECATED: Setup Token Authentication
 
-OnboardKit uses **Claude Code setup tokens** to authenticate with your Claude Pro/Max subscription.
+**This authentication method no longer works.**
+
+Claude Code setup tokens (`sk-ant-oat01-...`) do not work with the Anthropic API. They are OAuth session tokens for Claude Code CLI only.
+
+## ✅ Use API Keys Instead
+
+OnboardKit now uses **Anthropic API keys** for authentication.
+
+👉 **See:** [API-KEY-SETUP.md](./API-KEY-SETUP.md) for the correct setup process.
+
+### Quick Migration
+
+1. Visit [console.anthropic.com](https://console.anthropic.com)
+2. Get an API key (starts with `sk-ant-api03-...`)
+3. Run: `npx onboardkit auth`
+4. Paste your API key
+
+---
+
+# Old Documentation (No Longer Valid)
+
+OnboardKit ~~uses~~ **used to claim to use** Claude Code setup tokens to authenticate with your Claude Pro/Max subscription.
 
 ## Why Setup Tokens?
 
