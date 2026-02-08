@@ -12,22 +12,23 @@ Generate beautiful, production-ready onboarding screens for your React Native/Ex
 
 Building mobile onboarding screens is repetitive and time-consuming. OnboardKit eliminates the boilerplate:
 
-- **Zero-cost AI** - Uses OAuth to access your existing Claude/Gemini subscription (no API bills)
+- **Zero-cost AI** - Uses your Claude Pro/Max subscription ($20-200/month flat, no per-token charges)
 - **Markdown-first** - Define your onboarding flow in simple, readable markdown
-- **Production-ready code** - TypeScript strict mode, properly typed React Navigation, themed components
+- **Production-ready code** - TypeScript strict mode, properly typed navigation, themed components
 - **Fast** - From idea to working screens in under an hour
 - **Offline-capable** - Generate command works without AI for template-only generation
 
 ## Features
 
-- OAuth 2.0 + PKCE authentication (Anthropic Claude support, more providers coming)
-- Markdown spec parser with AI-powered validation and enhancement
-- Template-based code generation (Welcome, Login, Signup screens)
-- Full React Navigation setup with type-safe routing
-- Complete theme system (colors, typography, spacing)
-- Shared component library (Button, Input, Card)
-- Checkpoint/resume system for interrupted workflows
-- Cross-platform support (macOS, Linux, Windows)
+- **Claude Pro/Max Integration** - Uses setup tokens from official Claude Code CLI
+- **Markdown Spec Parser** - AI-powered validation and enhancement
+- **Template-Based Generation** - Welcome, Login, Signup, Onboarding steps, Paywalls
+- **Dual Navigation Support** - React Navigation Stack OR Expo Router
+- **Complete Theme System** - Colors, typography, spacing
+- **Shared Component Library** - Button, Input, Card
+- **Stitch MCP Integration** - Optional UI design generation
+- **Checkpoint/Resume System** - Never lose progress
+- **Cross-Platform** - macOS, Linux, Windows
 
 ## Quick Start
 
@@ -45,9 +46,12 @@ That's it! You'll have a complete `onboardkit-output/` directory with all your s
 
 ## Prerequisites
 
-- Node.js >= 22
-- An existing Expo or React Native project
-- (Optional) Claude Pro/Max subscription for AI features
+- **Node.js >= 22**
+- **An existing Expo or React Native project**
+- **For AI features:**
+  - Claude Pro ($20/month) or Claude Max ($200/month) subscription
+  - Claude Code CLI installed (`brew install anthropics/claude-code/claude`)
+  - See [SETUP-TOKEN.md](./SETUP-TOKEN.md) for authentication setup
 
 ## Installation
 
@@ -63,6 +67,24 @@ If you prefer to install globally:
 npm install -g onboardkit
 onboardkit <command>
 ```
+
+## Authentication (Required for AI Features)
+
+OnboardKit uses **Claude Code setup tokens** to access your Claude Pro/Max subscription:
+
+```bash
+# 1. Install Claude Code CLI
+brew install anthropics/claude-code/claude
+
+# 2. Generate setup token (opens browser)
+claude setup-token
+
+# 3. Authenticate OnboardKit
+npx onboardkit auth
+# Paste token when prompted
+```
+
+**See [SETUP-TOKEN.md](./SETUP-TOKEN.md) for full details**
 
 ## Usage
 
