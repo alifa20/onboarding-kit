@@ -77,12 +77,12 @@ Claude Code CLI (official)
   ↓ [claude setup-token]
 Browser → claude.ai → Authenticate
   ↓
-Long-lived OAuth token (sk-ant-oat01-...)
+Long-lived setup token (sk-ant-oat01-...)
   ↓ [copy/paste]
 OnboardKit
   ↓ [stores in keychain]
   ↓ [uses for AI operations]
-api.githubcopilot.com (Claude Code API)
+api.anthropic.com (Anthropic API)
   ↓
 Claude Pro/Max subscription
 ```

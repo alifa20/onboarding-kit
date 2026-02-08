@@ -1,6 +1,6 @@
 /**
- * Claude Code Proxy Client
- * Routes requests to api.githubcopilot.com with Claude Code headers
+ * Claude Proxy Client
+ * Routes requests to Anthropic API using Claude Code setup tokens
  */
 
 import type {
@@ -11,20 +11,15 @@ import type {
 } from './types.js';
 
 /**
- * Claude Code API endpoint (not standard Anthropic API)
+ * Anthropic API endpoint (standard Claude API)
+ * Setup tokens from Claude Code are standard API keys for this endpoint
  */
-const CLAUDE_CODE_ENDPOINT = 'https://api.githubcopilot.com/v1/messages';
+const ANTHROPIC_API_ENDPOINT = 'https://api.anthropic.com/v1/messages';
 
 /**
- * Default User-Agent for Claude Code requests
+ * Default User-Agent for requests
  */
-const CLAUDE_CODE_USER_AGENT = 'Claude-Code-CLI/1.0';
-
-/**
- * Required system prompt prefix for Claude Code API
- */
-const CLAUDE_CODE_SYSTEM_PREFIX =
-  'You are Claude Code, Anthropic\'s official CLI for Claude.';
+const DEFAULT_USER_AGENT = 'OnboardKit/1.0';
 
 /**
  * Claude Code Proxy Client
@@ -37,31 +32,20 @@ export class ClaudeProxyClient {
 
   constructor(config: ProxyClientConfig) {
     this.tokens = config.tokens;
-    this.endpoint = config.endpoint || CLAUDE_CODE_ENDPOINT;
-    this.userAgent = config.userAgent || CLAUDE_CODE_USER_AGENT;
+    this.endpoint = config.endpoint || ANTHROPIC_API_ENDPOINT;
+    this.userAgent = config.userAgent || DEFAULT_USER_AGENT;
   }
 
   /**
-   * Send message to Claude via Claude Code API
+   * Send message to Claude via Anthropic API
    */
   async sendMessage(request: ClaudeCodeRequest): Promise<ClaudeCodeResponse> {
-    // Ensure system prompt starts with Claude Code prefix
-    if (request.system) {
-      if (!request.system.startsWith(CLAUDE_CODE_SYSTEM_PREFIX)) {
-        request.system = `${CLAUDE_CODE_SYSTEM_PREFIX}\n\n${request.system}`;
-      }
-    } else {
-      request.system = CLAUDE_CODE_SYSTEM_PREFIX;
-    }
-
-    // Build headers with OAuth token and Claude Code identification
+    // Build headers with setup token as API key
+    // Setup tokens from Claude Code are standard Anthropic API keys
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${this.tokens.access_token}`,
-      'User-Agent': this.userAgent,
+      'x-api-key': this.tokens.access_token,
       'anthropic-version': '2023-06-01',
-      // Claude Code specific headers
-      'X-Claude-Code': 'true',
     };
 
     try {
@@ -73,8 +57,15 @@ export class ClaudeProxyClient {
 
       if (!response.ok) {
         const errorText = await response.text();
+        let errorMsg = errorText;
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMsg = errorJson.error?.message || errorText;
+        } catch {
+          // Keep raw error text if not JSON
+        }
         throw new Error(
-          `Claude Code API error (${response.status}): ${errorText}`
+          `Anthropic API error (${response.status}): ${errorMsg}`
         );
       }
 
@@ -82,7 +73,7 @@ export class ClaudeProxyClient {
       return data as ClaudeCodeResponse;
     } catch (error) {
       throw new Error(
-        `Failed to send message via Claude Code API: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to send message via Anthropic API: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
   }
