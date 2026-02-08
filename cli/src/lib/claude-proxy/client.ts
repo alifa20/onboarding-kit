@@ -11,8 +11,8 @@ import type {
 } from './types.js';
 
 /**
- * Anthropic API endpoint (standard Claude API)
- * Setup tokens from Claude Code are standard API keys for this endpoint
+ * Anthropic API endpoint
+ * Works with both OAuth tokens (Authorization: Bearer) and API keys (x-api-key)
  */
 const ANTHROPIC_API_ENDPOINT = 'https://api.anthropic.com/v1/messages';
 
@@ -37,16 +37,23 @@ export class ClaudeProxyClient {
   }
 
   /**
-   * Send message to Claude via Anthropic API
+   * Send message to Claude via OAuth or API
    */
   async sendMessage(request: ClaudeCodeRequest): Promise<ClaudeCodeResponse> {
-    // Build headers with setup token as API key
-    // Setup tokens from Claude Code are standard Anthropic API keys
+    // Detect token type and use appropriate authentication header
+    const isOAuthToken = this.tokens.access_token.startsWith('sk-ant-oat');
+    
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'x-api-key': this.tokens.access_token,
       'anthropic-version': '2023-06-01',
     };
+    
+    // OAuth tokens use Authorization: Bearer, API keys use x-api-key
+    if (isOAuthToken) {
+      headers['Authorization'] = `Bearer ${this.tokens.access_token}`;
+    } else {
+      headers['x-api-key'] = this.tokens.access_token;
+    }
 
     try {
       const response = await fetch(this.endpoint, {
